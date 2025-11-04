@@ -66,5 +66,6 @@ jobs:
             tail -n 10 "$LATEST" >> $GITHUB_STEP_SUMMARY
           else
             echo "No output files found." >> $GITHUB_STEP_SUMMARY
+          fi
 
 
