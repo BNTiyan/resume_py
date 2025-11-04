@@ -313,6 +313,10 @@ def resolve_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
     serpapi_key = fetch.get("serpapi_key") or os.getenv("SERPAPI_KEY")
     company_source = fetch.get("company_source")
     companies = fetch.get("companies") or []
+    # optional combined options
+    free_options = cfg.get("free_options", {})
+    company_options = cfg.get("company_options", {})
+    run_both = bool(cfg.get("run_both", False))
 
     return {
         "resume": cfg.get("resume"),
@@ -327,6 +331,9 @@ def resolve_from_config(cfg: dict[str, Any]) -> dict[str, Any]:
         "company_source": company_source,
         "companies": companies,
         "output": cfg.get("output", {}),
+        "free_options": free_options,
+        "company_options": company_options,
+        "run_both": run_both,
     }
 
 
@@ -374,6 +381,7 @@ def main() -> None:
     parser.add_argument("--out", default=str(here / "output" / f"matched_jobs_{ts}.json"), help="Output JSON path")
     parser.add_argument("--csv-out", default=None, help="Optional CSV output path; defaults to same as --out with .csv suffix")
     parser.add_argument("--save-fetched", action="store_true", help="Also save all fetched jobs to JSON and CSV")
+    parser.add_argument("--run-both", action="store_true", help="Fetch from both free_options and company_options and combine")
     args = parser.parse_args()
 
     # Load and merge config if provided (or if default exists)
@@ -426,6 +434,11 @@ def main() -> None:
     else:
         cfg_companies = [c.strip() for c in companies_arg.split(",") if c.strip()]
 
+    # Combined options from config
+    free_opts = resolved_cfg.get("free_options") or {}
+    company_opts = resolved_cfg.get("company_options") or {}
+    run_both = args.run_both or bool(resolved_cfg.get("run_both"))
+
     # Output handling (configurable dir/prefix)
     out_cfg = resolved_cfg.get("output", {}) if resolved_cfg else {}
     out_path = args.out
@@ -438,27 +451,59 @@ def main() -> None:
 
     resume_text = read_text(resume_file)
 
-    # Fetch jobs according to chosen source
-    fetched: list[dict[str, Any]]
-    if company_source and cfg_companies:
-        fetcher = COMPANY_SOURCES.get(company_source)
-        if not fetcher:
-            raise SystemExit(f"Unknown company source: {company_source}")
-        fetched = fetcher(cfg_companies, args.fetch_limit)
-    elif free_source and query is not None:
-        fetcher = FREE_SOURCES.get(free_source)
-        if not fetcher:
-            raise SystemExit(f"Unknown free source: {free_source}")
-        fetched = fetcher(query, args.fetch_limit)
-    elif serpapi_key and query:
-        fetched = fetch_serpapi_google_jobs(query, location, serpapi_key, args.fetch_limit)
+    # Fetch jobs according to chosen source(s)
+    fetched: list[dict[str, Any]] = []
+
+    def _dedupe_by_url(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        seen: set[str] = set()
+        out: list[dict[str, Any]] = []
+        for it in items:
+            key = (it.get("url") or f"{it.get('title','')}|{it.get('company','')}|{it.get('location','')}")
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(it)
+        return out
+
+    if run_both:
+        # Company block
+        comp_src = company_source or company_opts.get("company_source")
+        comp_companies = cfg_companies or company_opts.get("companies") or []
+        comp_query = query or company_opts.get("query")
+        if comp_src and comp_companies:
+            comp_fetcher = COMPANY_SOURCES.get(comp_src)
+            if not comp_fetcher:
+                raise SystemExit(f"Unknown company source: {comp_src}")
+            fetched += comp_fetcher(comp_companies, args.fetch_limit)
+        # Free block
+        free_src = free_source or free_opts.get("source")
+        free_query = query or free_opts.get("query")
+        if free_src and free_query is not None:
+            free_fetcher = FREE_SOURCES.get(free_src)
+            if not free_fetcher:
+                raise SystemExit(f"Unknown free source: {free_src}")
+            fetched += free_fetcher(free_query, args.fetch_limit)
+        fetched = _dedupe_by_url(fetched)
     else:
-        fetched = load_jobs(jobs_arg, jobs_url_arg, here)
-        if isinstance(fetched, dict) and 'items' in fetched:
-            fetched = fetched['items']  # normalize
-        if not isinstance(fetched, list):
-            fetched = []
-        fetched = fetched[: args.fetch_limit]
+        if company_source and cfg_companies:
+            fetcher = COMPANY_SOURCES.get(company_source)
+            if not fetcher:
+                raise SystemExit(f"Unknown company source: {company_source}")
+            fetched = fetcher(cfg_companies, args.fetch_limit)
+        elif free_source and query is not None:
+            fetcher = FREE_SOURCES.get(free_source)
+            if not fetcher:
+                raise SystemExit(f"Unknown free source: {free_source}")
+            fetched = fetcher(query, args.fetch_limit)
+        elif serpapi_key and query:
+            fetched = fetch_serpapi_google_jobs(query, location, serpapi_key, args.fetch_limit)
+        else:
+            fetched = load_jobs(jobs_arg, jobs_url_arg, here)
+            if isinstance(fetched, dict) and 'items' in fetched:
+                fetched = fetched['items']  # normalize
+            if not isinstance(fetched, list):
+                fetched = []
+            fetched = fetched[: args.fetch_limit]
 
     # Score and select
     scored = []
