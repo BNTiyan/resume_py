@@ -1,6 +1,7 @@
 {
   "resume": "input/resume.txt",
   "top": 15,
+  "run_both": true,
   "fetch": {
     "mode": "company",
     "company_source": "lever",
@@ -15,8 +16,8 @@
   },
   "company_options": {
     "mode": "company",
-    "company_source": "greenhouse",
-    "companies": ["openai", "databricks", "stripe"],
+    "company_source": "lever",
+    "companies": ["openai", "jpmorgan", "meta", "mrstanley", "oracle", "uber"],
     "query": "python|mlops|data"
   },
   "output": {
