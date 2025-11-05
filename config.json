@@ -1,6 +1,7 @@
 {
   "resume": "input/resume.txt",
   "top": 15,
+  "country": "",
   "run_both": false,
   "fetch": {
     "mode": "company",
@@ -19,41 +20,47 @@
     "sites": [
       {
         "url": "https://www.metacareers.com/jobs/",
-        "list_selector": "a[href*='/jobs/']",
+        "list_selector": "a[href*='job'], a[href*='/jobs/'], a[href*='/careers/']",
         "title_selector": "",
         "location_selector": "",
-        "link_selector": "",
+        "link_selector": "a",
+        "wait_selector": "a",
+        "sleep_seconds": 4,
         "company": "Meta",
         "source": "selenium:metacareers",
         "careers_url": "https://www.metacareers.com/",
-        "domain_filter": "metacareers.com",
-        "require_path_contains": "/jobs/",
+        "domain_filter": "",
+        "require_path_contains": "",
         "absolute_base": "https://www.metacareers.com"
       },
       {
         "url": "https://careers.oracle.com/jobs/",
-        "list_selector": "a[href*='/jobs/']",
+        "list_selector": "a[href*='job'], a[href*='/jobs/'], a[href*='/careers/']",
         "title_selector": "",
         "location_selector": "",
-        "link_selector": "",
+        "link_selector": "a",
+        "wait_selector": "a",
+        "sleep_seconds": 4,
         "company": "Oracle",
         "source": "selenium:oracle",
         "careers_url": "https://careers.oracle.com/",
-        "domain_filter": "oracle.com",
-        "require_path_contains": "/jobs/",
+        "domain_filter": "",
+        "require_path_contains": "",
         "absolute_base": "https://careers.oracle.com"
       },
       {
         "url": "https://www.morganstanley.com/careers",
-        "list_selector": "a[href*='/careers']",
+        "list_selector": "a[href*='job'], a[href*='/jobs/'], a[href*='/careers/']",
         "title_selector": "",
         "location_selector": "",
-        "link_selector": "",
+        "link_selector": "a",
+        "wait_selector": "a",
+        "sleep_seconds": 4,
         "company": "Morgan Stanley",
         "source": "selenium:morganstanley",
         "careers_url": "https://www.morganstanley.com/careers",
-        "domain_filter": "morganstanley.com",
-        "require_path_contains": "/careers",
+        "domain_filter": "",
+        "require_path_contains": "",
         "absolute_base": "https://www.morganstanley.com"
       }
     ]
