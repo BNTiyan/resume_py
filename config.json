@@ -12,7 +12,7 @@
   },
   "selenium_options": {
     "enabled": true,
-    "sites": ["openai", "jpmorgan", "meta", "mrstanley", "oracle", "adp", "google", "microsoft", "salesforce", "tiktok", "twitter", "uber", "yahoo", "youtube",  "apple", "meta", "netflix", "nvidia", "uber", "yahoo", "youtube", "zoom", "amazon", "jpmorgan"]
+    "sites": []
 
   },
   "output": {
