@@ -547,16 +547,20 @@ def main() -> None:
             # Fallback: Initialize LLMCoverLetterJobDescription for cover letters  
             use_llm_resumer = False
             llm_resumer = None
+            llm_resumer_ready = False
             use_llm_cover = False
             llm_cover = None
-            
-            if not use_job_app_gen and bool(resolved_cfg.get("use_llm_resumer", False)) and LLM_RESUMER_AVAILABLE and use_openai and openai_key:
+
+            if LLM_RESUMER_AVAILABLE and use_openai and openai_key:
                 try:
                     llm_resumer = LLMResumer(openai_key)
                     llm_resumer.set_resume_data(resume_text)
+                    llm_resumer_ready = True
                     use_llm_resumer = True
-                    print("[llm] Using LLMResumer (LangChain) for resume and cover letter generation")
+                    print("[llm] LLMResumer initialized and will be used for resume generation")
                 except Exception as e:
+                    llm_resumer = None
+                    llm_resumer_ready = False
                     print(f"[llm] Failed to initialize LLMResumer: {e}. Falling back.")
             
             if not use_job_app_gen and not use_llm_resumer and LLM_COVER_LETTER_AVAILABLE and use_openai and openai_key:
@@ -587,6 +591,7 @@ def main() -> None:
             # Auto-tailor resume and generate cover letter for jobs with score > 40
             auto_tailor = bool(resolved_cfg.get("auto_tailor_resume", False))
             tailor_threshold = int(resolved_cfg.get("tailor_threshold", 40))
+            enforced_tailor_threshold = max(tailor_threshold, 40)
             tailored_resumes_dir = out_file.parent / "tailored_resumes"
             if auto_tailor:
                 tailored_resumes_dir.mkdir(parents=True, exist_ok=True)
@@ -597,6 +602,10 @@ def main() -> None:
                 role = (j.get("title") or "").strip() or "Role"
                 jd_text = (j.get("description") or "").strip()
                 base = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{company}_{role}")[:80]
+                llm_resume_generated = False
+                llm_resume_text = None
+                builder_tailored = builder
+                should_force_llm_resume = False
                 
                 # Debug: log job details
                 print(f"[cover] {idx+1}/100: {company} - {role} | Score: {score} | JD length: {len(jd_text)} chars")
@@ -605,7 +614,7 @@ def main() -> None:
                 
                 # Use LLMParser to enrich job information if available
                 parsed_info = None
-                if use_llm_parser and jd_text and len(jd_text) >= 100:
+                if use_llm_parser and jd_text:
                     try:
                         print(f"  [parser] Parsing job description for {company}...")
                         parsed_info = llm_parser.parse_job_from_text(jd_text)
@@ -634,8 +643,61 @@ def main() -> None:
                         print(f"  [parser] Error parsing {company}: {e}")
                         parsed_info = None
                 
+                job_summary_override = ""
+                job_description_override = jd_text
+                job_keywords_override = ""
+                if parsed_info:
+                    job_summary_override = (parsed_info.get("description") or "").strip()
+                    if job_summary_override:
+                        job_description_override = job_summary_override
+                    skill_terms: list[str] = []
+                    for key in ("required_skills", "preferred_skills"):
+                        field_val = (parsed_info.get(key) or "").strip()
+                        if field_val:
+                            skill_terms.extend(
+                                kw.strip()
+                                for kw in re.split(r"[,\n;]", field_val)
+                                if kw.strip()
+                            )
+                    if skill_terms:
+                        seen_terms: list[str] = []
+                        for kw in skill_terms:
+                            if kw not in seen_terms:
+                                seen_terms.append(kw)
+                        job_keywords_override = ", ".join(seen_terms)
+                job_context_llm = {
+                    "job_summary": job_summary_override or job_description_override,
+                    "job_description": job_description_override,
+                    "job_keywords": job_keywords_override,
+                    "company": company,
+                    "role": role,
+                }
+                should_force_llm_resume = llm_resumer_ready and auto_tailor and bool(jd_text)
+                llm_cover_generated = False
+                
+                def write_llm_cover_letter() -> None:
+                    nonlocal llm_cover_generated, builder_tailored
+                    if llm_cover_generated:
+                        return
+                    if not (llm_resumer_ready and auto_tailor and jd_text):
+                        return
+                    try:
+                        cover_letter_llm = llm_resumer.generate_cover_letter(
+                            jd_text, company, role, job_context=job_context_llm
+                        ) if llm_resumer else None
+                        if cover_letter_llm:
+                            txt_path = letters_dir / f"cover_{base}.txt"
+                            with open(txt_path, "w", encoding="utf-8") as f:
+                                f.write(cover_letter_llm)
+                            llm_cover_generated = True
+                            builder_tailored = None
+                            print(f"  [llm] Cover letter saved for {company} using LLMResumer")
+                    except Exception as e:
+                        print(f"  [llm] Cover letter generation failed for {company}: {e}")
+                
                 # Method 1: JobApplicationGenerator (unified, preferred)
-                if use_job_app_gen and auto_tailor and score > tailor_threshold and jd_text:
+                jobgen_success = False
+                if use_job_app_gen and auto_tailor and jd_text:
                     try:
                         print(f"  [jobgen] Generating application package for {company}...")
                         result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
@@ -660,27 +722,55 @@ def main() -> None:
                             with open(summary_path, "w", encoding="utf-8") as f:
                                 f.write(result["job_summary"])
                         
-                        continue  # Skip to next job
+                        jobgen_success = True
                     except Exception as e:
                         print(f"  [jobgen] Error for {company}: {e}. Falling back.")
                 
+                if jobgen_success:
+                    if should_force_llm_resume and not llm_resume_generated:
+                        try:
+                            llm_resume_text = (
+                                llm_resumer.generate_tailored_resume(
+                                    jd_text, company, role, job_context=job_context_llm
+                                )
+                                if llm_resumer
+                                else None
+                            )
+                            if llm_resume_text:
+                                resume_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                with open(resume_path, "w", encoding="utf-8") as f:
+                                    f.write(llm_resume_text)
+                                llm_resume_generated = True
+                                print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                        except Exception as e:
+                            print(f"  [llm] Tailored resume generation failed for {company}: {e}")
+                    write_llm_cover_letter()
+                    continue  # Skip to next job
+                
                 # Method 2: LLMResumer (parallel resume + cover letter generation)
-                if use_llm_resumer and auto_tailor and score > tailor_threshold and jd_text:
+                if use_llm_resumer and auto_tailor and jd_text:
                     try:
                         print(f"  [llm] Generating resume + cover letter for {company} using LangChain...")
-                        result = llm_resumer.generate_resume_and_cover_letter(jd_text, company, role)
+                        resume_text_llm = llm_resumer.generate_tailored_resume(
+                            jd_text, company, role, job_context=job_context_llm
+                        )
+                        cover_letter_llm = llm_resumer.generate_cover_letter(
+                            jd_text, company, role, job_context=job_context_llm
+                        )
                         
-                        # Save tailored resume
-                        if result.get("resume"):
+                        if resume_text_llm:
                             resume_path = tailored_resumes_dir / f"resume_{base}.txt"
                             with open(resume_path, "w", encoding="utf-8") as f:
-                                f.write(result["resume"])
+                                f.write(resume_text_llm)
+                            llm_resume_text = resume_text_llm
+                            llm_resume_generated = True
                         
-                        # Save cover letter
-                        if result.get("cover_letter"):
+                        if cover_letter_llm:
                             txt_path = letters_dir / f"cover_{base}.txt"
                             with open(txt_path, "w", encoding="utf-8") as f:
-                                f.write(result["cover_letter"])
+                                f.write(cover_letter_llm)
+                            llm_cover_generated = True
+                            builder_tailored = None
                         
                         continue  # Skip to next job
                     except Exception as e:
@@ -688,7 +778,7 @@ def main() -> None:
                 
                 # Fallback: Standard resume tailoring (if score > threshold)
                 builder_tailored = builder
-                if auto_tailor and RESUME_BUILDER_AVAILABLE and score > tailor_threshold and jd_text:
+                if auto_tailor and RESUME_BUILDER_AVAILABLE and score >= enforced_tailor_threshold and jd_text:
                     try:
                         tailored_text = tailor_resume_for_job(
                             resume_text, jd_text, company, role, openai_model, openai_key
@@ -697,17 +787,59 @@ def main() -> None:
                             tailored_doc = build_tailored_resume_doc(tailored_text)
                             resume_path = tailored_resumes_dir / f"resume_{base}.docx"
                             tailored_doc.save(resume_path)
-                            # Use tailored resume for cover letter generation
+                            if should_force_llm_resume and not llm_resume_generated:
+                                try:
+                                    llm_resume_text = (
+                                        llm_resumer.generate_tailored_resume(
+                                            jd_text, company, role, job_context=job_context_llm
+                                        )
+                                        if llm_resumer
+                                        else None
+                                    )
+                                    if llm_resume_text:
+                                        resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                        with open(resume_txt_path, "w", encoding="utf-8") as f:
+                                            f.write(llm_resume_text)
+                                        llm_resume_generated = True
+                                        print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                                except Exception as e:
+                                    print(f"  [llm] Tailored resume generation failed for {company}: {e}")
                             if COVER_LETTER_AVAILABLE:
-                                builder_tailored = CoverLetterBuilder(tailored_text, name_line)
+                                if llm_resume_generated and llm_resume_text:
+                                    builder_tailored = CoverLetterBuilder(llm_resume_text, name_line)
+                                else:
+                                    builder_tailored = CoverLetterBuilder(tailored_text, name_line)
                     except Exception as e:
                         print(f"[resume_tailor] error for {company}: {e}")
                 
+                if should_force_llm_resume and not llm_resume_generated:
+                    try:
+                        llm_resume_text = (
+                            llm_resumer.generate_tailored_resume(
+                                jd_text, company, role, job_context=job_context_llm
+                            )
+                            if llm_resumer
+                            else None
+                        )
+                        if llm_resume_text:
+                            resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
+                            with open(resume_txt_path, "w", encoding="utf-8") as f:
+                                f.write(llm_resume_text)
+                            llm_resume_generated = True
+                            print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                            if COVER_LETTER_AVAILABLE:
+                                builder_tailored = CoverLetterBuilder(llm_resume_text, name_line)
+                    except Exception as e:
+                        print(f"  [llm] Tailored resume generation failed for {company}: {e}")
+                
+                write_llm_cover_letter()
+                
                 # Method 3: LLMCoverLetterJobDescription (cover letter only)
-                if use_llm_cover and jd_text:
+                if not llm_cover_generated and use_llm_cover and jd_text:
                     try:
                         print(f"  [llmcover] Generating cover letter for {company} using LangChain...")
-                        letter_txt = llm_cover.generate_from_job_and_resume(jd_text, resume_text)
+                        resume_for_letter = llm_resume_text if llm_resume_text else resume_text
+                        letter_txt = llm_cover.generate_from_job_and_resume(jd_text, resume_for_letter)
                         if letter_txt:
                             txt_path = letters_dir / f"cover_{base}.txt"
                             with open(txt_path, "w", encoding="utf-8") as f:
@@ -717,16 +849,17 @@ def main() -> None:
                         print(f"  [llmcover] Error for {company}: {e}. Falling back.")
                 
                 # Compose cover letter using standard method
-                letter_txt = None
-                if builder_tailored and use_openai and openai_key:
-                    letter_txt = builder_tailored.compose_openai_text(jd_text, company, role, openai_model, openai_key)
-                if not letter_txt and builder_tailored:
-                    letter_txt = builder_tailored.compose_concise_text(jd_text, company, role)
+                if not llm_cover_generated:
+                    letter_txt = None
+                    if builder_tailored and use_openai and openai_key:
+                        letter_txt = builder_tailored.compose_openai_text(jd_text, company, role, openai_model, openai_key)
+                    if not letter_txt and builder_tailored:
+                        letter_txt = builder_tailored.compose_concise_text(jd_text, company, role)
                 
-                if letter_txt:
-                    txt_path = letters_dir / f"cover_{base}.txt"
-                    with open(txt_path, "w", encoding="utf-8") as f:
-                        f.write(letter_txt)
+                    if letter_txt:
+                        txt_path = letters_dir / f"cover_{base}.txt"
+                        with open(txt_path, "w", encoding="utf-8") as f:
+                            f.write(letter_txt)
             
             print(f"[cover] generated cover letters in {letters_dir}")
             if auto_tailor:
