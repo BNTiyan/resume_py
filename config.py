@@ -25,7 +25,7 @@ def resolve_from_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     company_options = cfg.get("company_options", {}) if cfg else {}
     run_both = bool(cfg.get("run_both", False)) if cfg else False
     selenium_only = bool(cfg.get("selenium_only", False)) if cfg else False
-    companies = cfg.get("companies") or []
+    companies = company_options.get("companies") or []
 
     return {
         "resume": cfg.get("resume") if cfg else None,
