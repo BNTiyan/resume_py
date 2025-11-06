@@ -5,6 +5,7 @@ LinkedIn Profile: https://www.linkedin.com/in/bhavana-nare-60657385/
 
 EDUCATION
 Master of Computer Science Thesis (Aug 2021 – May 2023) University of Georgia, Athens, Georgia GPA: 3.7/4
+• Thesis research published as IEEE Xplore Document 11127674 on computational trust for human-robot collaboration.
 Bachelor of Technology – Computer Science (Oct 2010 – Apr 2014) Sree Vidyanikethan Engineering College, Tirupati, Andhra Pradesh GPA:7.9/10
 
 PROFESSIONAL SUMMARY
@@ -26,7 +27,7 @@ Led end-to-end development for AUTOSIM and IMS_DASHBOARD, integrating cloud APIs
 Proficient in Linux system administration, shell scripting, and version control tools like Git, Bitbucket, and Confluence for project management.
 Experienced in building task management dashboards and workflow reporting tools, leveraging React JS, Django, and AWS S3 for storage and real-time updates.
 Processed API requests or automates tasks, such as triggering events when new data is uploaded to S3 or handling backend logic for AUTOSIM workflows using AWS Lambda services
-Published research on a Computational Trust Framework at the University of Georgia, implementing machine learning models for dynamic trust scoring in human-robot teams. Computational Trust
+Published IEEE Xplore publication (Document 11127674) on a Computational Trust Framework for human-robot teams, leading machine learning research on dynamic trust scoring and safety alignment. https://ieeexplore.ieee.org/document/11127674
 
 TECHNICAL SKILLS
 Programming Languages: Python, C++, Django, Flask, Java, Unix Shell Scripting, React JS, MySQL
@@ -46,6 +47,9 @@ Software Integration & Validation: Middleware analysis, system debugging, testbe
 Pipeline Automation: CI/CD pipeline creation, PR automation, dependency management with Conan
 Full Stack Development: Flask, Django, Dash, React JS, SQL databases
 Computer Vision: Camera object detection, 2D to 3D box mapping, emergency braking assistance systems
+
+PUBLICATIONS
+- Bhavana Nare, et al., "Computational Trust Framework for Human-Robot Teams," IEEE Xplore, Document 11127674, 2024. Available at https://ieeexplore.ieee.org/document/11127674
 
 PROFESSIONAL EXPERIENCE
 Rivian Automotive, LLC May 2025 – Present
