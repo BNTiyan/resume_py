@@ -22,6 +22,7 @@ concurrency:
 jobs:
   match-jobs:
     runs-on: ubuntu-latest
+    timeout-minutes: 30  # Kill job if it runs longer than 30 minutes
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -44,22 +45,67 @@ jobs:
           chrome-version: stable
 
       - name: Run matcher with config
+        timeout-minutes: 20  # Timeout after 20 minutes
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_EMBED_MODEL: "text-embedding-3-small"
+          PYTHONUNBUFFERED: "1"
         run: |
-          python match.py --config "${{ inputs.config_path || 'config.json' }}"
+          echo "🚀 Starting job matcher..."
+          echo "Config: ${{ inputs.config_path || 'config.json' }}"
+          echo "⏰ Timeout: 20 minutes"
+          echo ""
+          
+          # Run with verbose output and timeout
+          timeout 1200 python match.py --config "${{ inputs.config_path || 'config.fast.json' }}" 2>&1 | tee match.log || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 124 ]; then
+              echo ""
+              echo "❌ ERROR: Process timed out after 20 minutes!"
+              echo "This usually means:"
+              echo "  - Too many jobs to process"
+              echo "  - Selenium pages taking too long to load"
+              echo "  - LLM calls are slow or hanging"
+              echo "  - Network issues fetching job descriptions"
+              exit 1
+            else
+              exit $EXIT_CODE
+            fi
+          }
+          
+          echo ""
+          echo "✅ Matcher completed"
 
       - name: List outputs
+        if: always()
         run: |
-          ls -l output || true
+          echo "📁 Output directory structure:"
+          ls -lR output/ 2>/dev/null || echo "No output directory found"
+          
+          echo ""
+          echo "📊 Job description lengths:"
+          if [ -d "output" ]; then
+            find output -name "*.json" -type f | while read f; do
+              echo "File: $f"
+              python3 -c "import json; d=json.load(open('$f')); print(f\"Jobs: {len(d.get('jobs', []))}\"); [print(f\"  {j.get('company','')} - JD length: {len(j.get('description',''))} chars\") for j in d.get('jobs', [])[:5]]" 2>/dev/null || echo "  Could not parse"
+            done
+          fi
 
       - name: Upload results artifact (JSON)
         uses: actions/upload-artifact@v4
         with:
           name: job-matches-json-${{ github.run_id }}-${{ github.run_attempt }}
           path: output/*.json
+          if-no-files-found: warn
+          retention-days: 7
+      
+      - name: Upload match log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: match-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: match.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -83,20 +129,99 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: tailored-resumes-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/tailored_resumes/*.docx
+          path: |
+            output/tailored_resumes/*.txt
+            output/tailored_resumes/*.docx
+          if-no-files-found: warn
+          retention-days: 7
+      
+      - name: Upload parsed jobs
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsed-jobs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/parsed_jobs/*.txt
           if-no-files-found: warn
           retention-days: 7
 
       - name: Append results to job summary
         if: always()
         run: |
-          echo "Latest output preview:" >> $GITHUB_STEP_SUMMARY
+          echo "# 📊 Job Matcher Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Find latest JSON output
           LATEST=$(ls -1t output/*.json 2>/dev/null | head -n1 || true)
+          
           if [ -n "$LATEST" ]; then
-            echo "\nFile: $LATEST\n" >> $GITHUB_STEP_SUMMARY
-            tail -n 10 "$LATEST" >> $GITHUB_STEP_SUMMARY
+            echo "## Latest Output: \`$(basename $LATEST)\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract statistics using Python
+            python3 << EOF >> $GITHUB_STEP_SUMMARY
+            import json
+            import sys
+
+            try:
+                with open("$LATEST") as f:
+                    data = json.load(f)
+                
+                jobs = data.get("jobs", [])
+                print(f"### Statistics")
+                print(f"- **Total Jobs**: {len(jobs)}")
+                
+                if jobs:
+                    # Count jobs with descriptions
+                    with_desc = sum(1 for j in jobs if len(j.get('description', '')) > 100)
+                    print(f"- **Jobs with Descriptions**: {with_desc} / {len(jobs)}")
+                    
+                    # Count scores
+                    scored = [j for j in jobs if 'score' in j]
+                    if scored:
+                        avg_score = sum(j.get('score', 0) for j in scored) / len(scored)
+                        print(f"- **Average Score**: {avg_score:.1f}")
+                    
+                    print(f"")
+                    print(f"### Top 10 Jobs")
+                    print(f"")
+                    print("| Company | Title | Score | JD Length |")
+                    print("|---------|-------|-------|-----------|")
+                    
+                    for idx, job in enumerate(jobs[:10]):
+                        company = job.get('company', 'Unknown')[:20]
+                        title = job.get('title', 'Unknown')[:40]
+                        score = job.get('score', 0)
+                        desc_len = len(job.get('description', ''))
+                        print(f"| {company} | {title} | {score:.1f} | {desc_len} chars |")
+                else:
+                    print("")
+                    print("⚠️ No jobs found in output")
+                    
+            except Exception as e:
+                print(f"")
+                print(f"⚠️ Error parsing output: {e}")
+            EOF
           else
-            echo "No output files found." >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No output files found" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          # Show generated files
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📁 Generated Files" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -d "output/cover_letters" ]; then
+            CL_COUNT=$(find output/cover_letters -name "*.txt" 2>/dev/null | wc -l)
+            echo "- **Cover Letters**: $CL_COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "output/tailored_resumes" ]; then
+            RES_COUNT=$(find output/tailored_resumes -name "*" -type f 2>/dev/null | wc -l)
+            echo "- **Tailored Resumes**: $RES_COUNT" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          if [ -d "output/parsed_jobs" ]; then
+            PARSED_COUNT=$(find output/parsed_jobs -name "*.txt" 2>/dev/null | wc -l)
+            echo "- **Parsed Jobs**: $PARSED_COUNT" >> $GITHUB_STEP_SUMMARY
           fi
 
 
