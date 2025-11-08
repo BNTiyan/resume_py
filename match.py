@@ -373,6 +373,48 @@ FREE_SOURCES = {
 }
 
 
+def check_sponsorship_available(jd_text: str, check_enabled: bool = False) -> bool:
+    """
+    Check if job description indicates visa/sponsorship is NOT available.
+    Returns True if sponsorship appears to be available, False if explicitly not available.
+    
+    Args:
+        jd_text: Job description text
+        check_enabled: Enable sponsorship check (disabled by default to avoid over-filtering)
+    
+    Returns:
+        bool: True if sponsorship available, False if explicitly blocked
+    """
+    if not check_enabled:
+        return True  # Always pass if check is disabled
+    
+    if not jd_text:
+        return True  # Assume sponsorship available if no text
+    
+    jd_lower = jd_text.lower()
+    
+    # Patterns indicating NO sponsorship
+    no_sponsorship_patterns = [
+        r"visa\s+sponsorship\s+is\s+not\s+available",
+        r"(?:no|not)\s+(?:visa|work\s+permit)\s+sponsorship",
+        r"sponsorship\s+(?:is\s+)?not\s+(?:available|provided)",
+        r"(?:visa|sponsorship|work\s+permit)\s+(?:is\s+)?not\s+available",
+        r"requires?.+?(?:us\s+(?:citizen|passport)|green\s+card|permanent\s+resident)",
+        r"(?:us\s+)?(?:citizen|citizenship|gc|green\s+card|permanent\s+resident)",
+        r"no\s+(?:visa|sponsorship|work\s+permit)\s+(?:available|provided)",
+        r"(?:only|must\s+be)\s+(?:us\s+)?(?:citizen|permanent\s+resident|gc\s+holder)",
+        r"visa\s+sponsorship\s+unavailable",
+        r"(?:not\s+)?available\s+to\s+sponsor",
+        r"restricted\s+to\s+(?:us\s+)?citizens",
+    ]
+    
+    for pattern in no_sponsorship_patterns:
+        if re.search(pattern, jd_lower):
+            return False  # Sponsorship NOT available
+    
+    return True  # Sponsorship likely available
+
+
 def score_job(job: dict[str, Any], resume_text: str) -> float:
     title = job.get("title", "")
     fields = "\n".join([
@@ -1049,6 +1091,13 @@ def main() -> None:
                 
                 print(f"[parallel] Job description fetching complete!")
             
+            # Track filtering statistics
+            filter_stats = {
+                "total": len(filtered_jobs),
+                "sponsorship_blocked": 0,
+                "created": 0,
+            }
+            
             for idx, j in enumerate(filtered_jobs):
                 score = j.get("score", 0)
                 company = _normalize_meta_field(j.get("company"))
@@ -1195,6 +1244,17 @@ def main() -> None:
 
                 # Debug: log job details
                 print(f"[cover] {idx+1}/100: {company} - {role} | Score: {score} | JD length: {len(jd_text)} chars")
+                
+                # Check if visa sponsorship is available (disabled by default - set check_enabled=True to enable)
+                has_sponsorship = check_sponsorship_available(jd_text, check_enabled=False)  # 🔴 SET TO True TO ENABLE
+                if not has_sponsorship:
+                    print(f"  [skip] ⏭️ ❌ SPONSORSHIP: No visa sponsorship available for this position")
+                    print(f"       Company: {company_label} | Role: {role_label} | Score: {score}")
+                    filter_stats["sponsorship_blocked"] += 1
+                    continue
+                else:
+                    if check_enabled:
+                        print(f"  [check] ✅ SPONSORSHIP: Sponsorship available")
                 
                 # If we STILL don't have a description, create a minimal one from title/company
                 if not jd_text or len(jd_text) < 50:
@@ -1351,6 +1411,7 @@ def main() -> None:
                             with open(resume_path, "w", encoding="utf-8") as f:
                                 f.write(result["resume"])
                             assets["resume"] = str(resume_path)
+                            filter_stats["created"] += 1
                             print(f"  [jobgen] ✅ Resume saved: {resume_path.name}")
                             
                             # Generate PDF and DOCX versions using helper
@@ -1465,6 +1526,7 @@ def main() -> None:
                             llm_resume_text = resume_text_llm
                             llm_resume_generated = True
                             assets["resume"] = str(resume_path)
+                            filter_stats["created"] += 1
                             print(f"  [llm] ✅ Resume saved: {resume_path.name}")
                             
                             # Generate PDF version - read from saved text file to ensure exact match
@@ -1700,6 +1762,27 @@ def main() -> None:
                                         print(f"[autofill] Failed for {job_url}: {e}")
                         except Exception as e:
                             print(f"[autofill] Unable to start Workday automation: {e}")
+    # Print filtering summary
+    print("\n" + "="*80)
+    print("📊 JOB FILTERING & RESUME GENERATION SUMMARY")
+    print("="*80)
+    print(f"\n🔍 FILTERING STAGES:")
+    print(f"  1️⃣  Total jobs fetched: {len(fetched)}")
+    print(f"  2️⃣  After score filter (>= {score_threshold}): {len(filtered_jobs)}")
+    if 'filter_stats' in locals():
+        print(f"  3️⃣  Sponsorship check:")
+        print(f"       - Blocked (no sponsorship): {filter_stats.get('sponsorship_blocked', 0)}")
+        print(f"       - Passed sponsorship: {len(filtered_jobs) - filter_stats.get('sponsorship_blocked', 0)}")
+        print(f"  4️⃣  Resumes created: {filter_stats.get('created', 0)}")
+    print(f"\n⚙️  CONFIG SETTINGS:")
+    print(f"  - min_score: {score_threshold}")
+    print(f"  - tailor_threshold: {tailor_threshold}")
+    print(f"  - top_per_company_limit: {top_per_company_limit}")
+    print(f"  - max possible resumes: {len(company_targets)} companies × {top_per_company_limit} = {len(company_targets) * top_per_company_limit}")
+    print(f"  - companies: {len(company_targets)} ({', '.join(company_targets[:5])}...)")
+    print(f"  - target_roles: {len(target_roles)} ({', '.join(target_roles[:3])}...)")
+    print("="*80 + "\n")
+    
     print("Top matches:")
     for j in top:
         line = f"- [{j['score']}] {j.get('title','')} @ {j.get('company','')} ({j.get('location','')})"
