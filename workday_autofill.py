@@ -96,10 +96,29 @@ class WorkdayAutofill:
         (By.CSS_SELECTOR, "button[data-automation-id='myInformation']"),
         (By.CSS_SELECTOR, "div[data-automation-id='myInformationSection'] button"),
     )
+    # Broad selectors to detect login screens
     LOGIN_FIELD_SELECTORS: tuple[tuple[str, str], ...] = (
         (By.CSS_SELECTOR, "input[name='username']"),
         (By.CSS_SELECTOR, "input[data-automation-id='emailInput']"),
+        (By.CSS_SELECTOR, "input[type='email']"),
         (By.CSS_SELECTOR, "input[name='password']"),
+        (By.CSS_SELECTOR, "input[type='password']"),
+    )
+    # Specific selectors used to perform login when creds are provided
+    LOGIN_USERNAME_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[name='username']"),
+        (By.CSS_SELECTOR, "input[data-automation-id='emailInput']"),
+        (By.CSS_SELECTOR, "input[type='email']"),
+    )
+    LOGIN_PASSWORD_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[name='password']"),
+        (By.CSS_SELECTOR, "input[type='password']"),
+    )
+    LOGIN_SUBMIT_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "button[type='submit']"),
+        (By.CSS_SELECTOR, "input[type='submit']"),
+        (By.CSS_SELECTOR, "button[data-automation-id='signInButton']"),
+        (By.XPATH, "//button[contains(translate(., 'SIGN IN', 'sign in'),'sign in')]"),
     )
     TEXT_FIELD_MAP: dict[str, tuple[tuple[str, str], ...]] = {
         "first_name": (
@@ -158,6 +177,38 @@ class WorkdayAutofill:
         (By.CSS_SELECTOR, "textarea[data-automation-id='coverLetter']"),
         (By.CSS_SELECTOR, "textarea[name*='coverLetter']"),
     )
+    # Create account flow (best-effort generic)
+    CREATE_LINK_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.XPATH, "//a[contains(translate(., 'CREATE ACCOUNT', 'create account'),'create account')]"),
+        (By.XPATH, "//button[contains(translate(., 'CREATE ACCOUNT', 'create account'),'create account')]"),
+        (By.XPATH, "//a[contains(translate(., 'SIGN UP', 'sign up'),'sign up')]"),
+        (By.XPATH, "//button[contains(translate(., 'SIGN UP', 'sign up'),'sign up')]"),
+        (By.XPATH, "//a[contains(translate(., 'REGISTER', 'register'),'register')]"),
+        (By.XPATH, "//button[contains(translate(., 'REGISTER', 'register'),'register')]"),
+    )
+    CREATE_EMAIL_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[type='email']"),
+        (By.CSS_SELECTOR, "input[name*='email']"),
+        (By.CSS_SELECTOR, "input[data-automation-id*='email']"),
+    )
+    CREATE_PASSWORD_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[type='password']"),
+        (By.CSS_SELECTOR, "input[name*='password']"),
+        (By.CSS_SELECTOR, "input[data-automation-id*='password']"),
+    )
+    CREATE_PASSWORD_CONFIRM_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[name*='confirm']"),
+        (By.CSS_SELECTOR, "input[id*='confirm']"),
+        (By.XPATH, "//input[@type='password'][contains(@aria-label,'confirm') or contains(@name,'confirm')]"),
+    )
+    CREATE_TERMS_CHECKBOX_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "input[type='checkbox'][name*='terms']"),
+        (By.CSS_SELECTOR, "input[type='checkbox'][data-automation-id*='terms']"),
+    )
+    CREATE_SUBMIT_SELECTORS: tuple[tuple[str, str], ...] = (
+        (By.CSS_SELECTOR, "button[type='submit']"),
+        (By.XPATH, "//button[contains(translate(., 'CREATE', 'create'),'create')]"),
+    )
 
     def __init__(
         self,
@@ -165,12 +216,18 @@ class WorkdayAutofill:
         profile: CandidateProfile,
         wait_seconds: int = 20,
         verbose: bool = True,
+        login_username: str | None = None,
+        login_password: str | None = None,
+        allow_account_creation: bool = False,
     ) -> None:
         self._driver_factory = driver_factory
         self.profile = profile
         self.wait_seconds = wait_seconds
         self.verbose = verbose
         self._driver: WebDriver | None = None
+        self._login_username = (login_username or "").strip()
+        self._login_password = (login_password or "").strip()
+        self._allow_account_creation = bool(allow_account_creation)
 
     def __enter__(self) -> "WorkdayAutofill":
         self._ensure_driver()
@@ -217,7 +274,19 @@ class WorkdayAutofill:
         time.sleep(2)
         self._wait_for_page_ready(driver)
         if self._login_required(driver):
-            raise RuntimeError("Workday page requires account sign-in; manual step needed.")
+            if self._login_username and self._login_password:
+                self._log("Login required. Attempting automated sign-in...")
+                if not self._perform_login(driver):
+                    if self._allow_account_creation:
+                        self._log("Login failed. Trying to create a new account...")
+                        if not self._try_create_account(driver):
+                            raise RuntimeError("Workday login/create-account failed; manual step needed.")
+                    else:
+                        raise RuntimeError("Workday login failed; manual step needed.")
+                # after login or account creation, wait for apply UI again
+                self._wait_for_page_ready(driver)
+            else:
+                raise RuntimeError("Workday page requires account sign-in; manual step needed.")
         self._click_apply_button(driver)
         self._switch_to_latest_window(driver)
         switched = self._enter_application_context(driver)
@@ -233,6 +302,143 @@ class WorkdayAutofill:
             driver.switch_to.default_content()
         self._log("Finished autofill run.")
         return True
+
+    def _perform_login(self, driver: WebDriver) -> bool:
+        # Fill username
+        user_set = False
+        for by, selector in self.LOGIN_USERNAME_SELECTORS:
+            try:
+                el = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, selector)))
+                with contextlib.suppress(WebDriverException):
+                    el.clear()
+                el.send_keys(self._login_username)
+                user_set = True
+                break
+            except TimeoutException:
+                continue
+            except WebDriverException:
+                continue
+        # Fill password
+        pass_set = False
+        for by, selector in self.LOGIN_PASSWORD_SELECTORS:
+            try:
+                el = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, selector)))
+                with contextlib.suppress(WebDriverException):
+                    el.clear()
+                el.send_keys(self._login_password)
+                pass_set = True
+                break
+            except TimeoutException:
+                continue
+            except WebDriverException:
+                continue
+        # Submit
+        submitted = False
+        if user_set and pass_set:
+            for by, selector in self.LOGIN_SUBMIT_SELECTORS:
+                btns = driver.find_elements(by, selector)
+                for b in btns:
+                    with contextlib.suppress(WebDriverException):
+                        b.click()
+                        submitted = True
+                        break
+                if submitted:
+                    break
+        if not submitted:
+            return False
+        time.sleep(2.5)
+        # Success condition: apply button or application iframe appears
+        if self._wait_for_any(driver, self.APPLY_BUTTON_SELECTORS + self.APPLICATION_IFRAME_SELECTORS, self.wait_seconds):
+            self._log("Login successful.")
+            return True
+        self._log("Login possibly unsuccessful; apply UI not detected.")
+        return False
+
+    def _try_create_account(self, driver: WebDriver) -> bool:
+        # Open create account UI
+        opened = False
+        for by, selector in self.CREATE_LINK_SELECTORS:
+            links = driver.find_elements(by, selector)
+            for l in links:
+                with contextlib.suppress(WebDriverException):
+                    l.click()
+                    time.sleep(1.0)
+                    opened = True
+                    break
+            if opened:
+                break
+        # If no explicit link, proceed anyway (some pages show create form inline)
+        # Fill email
+        email_set = False
+        for by, selector in self.CREATE_EMAIL_SELECTORS:
+            try:
+                el = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, selector)))
+                with contextlib.suppress(WebDriverException):
+                    el.clear()
+                el.send_keys(self._login_username)
+                email_set = True
+                break
+            except TimeoutException:
+                continue
+            except WebDriverException:
+                continue
+        # Fill password
+        pass_set = False
+        for by, selector in self.CREATE_PASSWORD_SELECTORS:
+            try:
+                el = WebDriverWait(driver, 5).until(EC.presence_of_element_located((by, selector)))
+                with contextlib.suppress(WebDriverException):
+                    el.clear()
+                el.send_keys(self._login_password)
+                pass_set = True
+                break
+            except TimeoutException:
+                continue
+            except WebDriverException:
+                continue
+        # Confirm password (best effort)
+        conf_set = False
+        for by, selector in self.CREATE_PASSWORD_CONFIRM_SELECTORS:
+            try:
+                el = WebDriverWait(driver, 3).until(EC.presence_of_element_located((by, selector)))
+                with contextlib.suppress(WebDriverException):
+                    el.clear()
+                el.send_keys(self._login_password)
+                conf_set = True
+                break
+            except TimeoutException:
+                continue
+            except WebDriverException:
+                continue
+        # Accept terms if present
+        for by, selector in self.CREATE_TERMS_CHECKBOX_SELECTORS:
+            boxes = driver.find_elements(by, selector)
+            for b in boxes:
+                with contextlib.suppress(WebDriverException):
+                    if not b.is_selected():
+                        b.click()
+                    break
+        # Submit
+        submitted = False
+        if email_set and pass_set:
+            for by, selector in self.CREATE_SUBMIT_SELECTORS:
+                btns = driver.find_elements(by, selector)
+                for b in btns:
+                    with contextlib.suppress(WebDriverException):
+                        b.click()
+                        submitted = True
+                        break
+                if submitted:
+                    break
+        if not submitted:
+            return False
+        time.sleep(2.5)
+        # Success condition: apply UI visible
+        if self._wait_for_any(driver, self.APPLY_BUTTON_SELECTORS + self.APPLICATION_IFRAME_SELECTORS, self.wait_seconds):
+            self._log("Account creation successful.")
+            return True
+        self._log("Account creation possibly unsuccessful; apply UI not detected.")
+        return False
 
     def _wait_for_page_ready(self, driver: WebDriver) -> None:
         selectors = self.APPLY_BUTTON_SELECTORS + self.APPLICATION_IFRAME_SELECTORS

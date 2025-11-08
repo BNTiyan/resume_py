@@ -104,6 +104,22 @@ except Exception:
     WorkdayAutofill = None  # type: ignore
     is_workday_url = lambda _: False  # type: ignore
 
+try:
+    from portal_autofill import (
+        CandidateProfile as PortalCandidateProfile,
+        SimpleGreenhouseAutofill,
+        SimpleLeverAutofill,
+        is_greenhouse_url,
+        is_lever_url,
+    )
+    PORTAL_AUTOFILL_AVAILABLE = True
+except Exception:
+    PORTAL_AUTOFILL_AVAILABLE = False
+    PortalCandidateProfile = None  # type: ignore
+    SimpleGreenhouseAutofill = None  # type: ignore
+    SimpleLeverAutofill = None  # type: ignore
+    is_greenhouse_url = lambda _: False  # type: ignore
+    is_lever_url = lambda _: False  # type: ignore
 from resume_utils import load_resume_data
 
 _non_alnum = re.compile(r"[^a-z0-9+#.\-\s]")
@@ -1836,21 +1852,60 @@ def main() -> None:
                             raw = f"{job.get('company','')}_{job.get('title','')}"
                             return re.sub(r"[^A-Za-z0-9._-]+", "_", raw).strip("_") or raw or "job"
 
+                        # Daily apply budget
+                        output_dir = (resolved_cfg.get("output") or {}).get("dir") or "output"
+                        daily_state_path = Path(output_dir) / "autofill_daily.json"
+                        today_str = datetime.utcnow().strftime("%Y-%m-%d")
+
+                        def _load_daily_state() -> dict[str, int | str]:
+                            try:
+                                if daily_state_path.exists():
+                                    data = json.loads(daily_state_path.read_text(encoding="utf-8"))
+                                    if data.get("date") == today_str:
+                                        return {"date": today_str, "used": int(data.get("used", 0))}
+                            except Exception:
+                                pass
+                            return {"date": today_str, "used": 0}
+
+                        def _save_daily_state(state: dict[str, int | str]) -> None:
+                            try:
+                                daily_state_path.parent.mkdir(parents=True, exist_ok=True)
+                                daily_state_path.write_text(json.dumps(state, indent=2), encoding="utf-8")
+                            except Exception:
+                                pass
+
+                        daily_limit = int(autofill_cfg.get("daily_limit", 10))
+                        state = _load_daily_state()
+                        remaining_budget = max(0, daily_limit - int(state.get("used", 0)))
+                        if remaining_budget <= 0:
+                            print(f"[autofill] Daily limit reached ({daily_limit}). Skipping autofill today.")
+                            # still continue to next steps (no autofill)
+                            raise Exception("DAILY_LIMIT_REACHED")
+
                         try:
                             def _driver_factory():
                                 if not create_chrome_driver:
                                     raise RuntimeError("Chrome driver factory unavailable")
                                 return create_chrome_driver(headless=headless)
 
+                            login_cfg = (autofill_cfg.get("login") or {})
+                            login_user = (login_cfg.get("username") or os.getenv("WORKDAY_USERNAME") or "").strip()
+                            login_pass = (login_cfg.get("password") or os.getenv("WORKDAY_PASSWORD") or "").strip()
+                            create_cfg = (autofill_cfg.get("create_account") or {})
+                            allow_create = bool(create_cfg.get("enabled", False))
+
                             with WorkdayAutofill(
                                 _driver_factory,
                                 profile,
                                 wait_seconds=wait_seconds,
                                 verbose=True,
+                                login_username=login_user,
+                                login_password=login_pass,
+                                allow_account_creation=allow_create,
                             ) as autofiller:
                                 applied = 0
                                 for job in workday_jobs:
-                                    if applied >= max_jobs:
+                                    if applied >= max_jobs or remaining_budget <= 0:
                                         break
                                     job_url = (job.get("url") or "").strip()
                                     if not job_url:
@@ -1875,11 +1930,92 @@ def main() -> None:
                                         )
                                         job["autofill_status"] = "success"
                                         applied += 1
+                                        # consume budget
+                                        state["used"] = int(state.get("used", 0)) + 1  # type: ignore[index]
+                                        remaining_budget -= 1
+                                        _save_daily_state(state)
                                     except Exception as e:
                                         job["autofill_status"] = f"error: {e}"
                                         print(f"[autofill] Failed for {job_url}: {e}")
                         except Exception as e:
-                            print(f"[autofill] Unable to start Workday automation: {e}")
+                            if str(e) != "DAILY_LIMIT_REACHED":
+                                print(f"[autofill] Unable to start Workday automation: {e}")
+                        # Greenhouse / Lever (simple) autofill
+                        providers = [p.strip().lower() for p in (autofill_cfg.get("providers") or [])]
+                        if PORTAL_AUTOFILL_AVAILABLE and providers:
+                            try:
+                                def _driver_factory2():
+                                    if not create_chrome_driver:
+                                        raise RuntimeError("Chrome driver factory unavailable")
+                                    return create_chrome_driver(headless=headless)
+                                portal_profile = PortalCandidateProfile(
+                                    first_name=profile.first_name,
+                                    last_name=profile.last_name,
+                                    email=profile.email,
+                                    phone=profile.phone,
+                                )
+                                gh_jobs = [j for j in top if is_greenhouse_url(j.get("url"))] if "greenhouse" in providers else []
+                                lv_jobs = [j for j in top if is_lever_url(j.get("url"))] if "lever" in providers else []
+                                # Apply Greenhouse
+                                if gh_jobs:
+                                    with SimpleGreenhouseAutofill(_driver_factory2, portal_profile, wait_seconds=wait_seconds, verbose=True) as gh:
+                                        applied = 0
+                                        for job in gh_jobs:
+                                            if applied >= max_jobs or remaining_budget <= 0:
+                                                break
+                                            job_url = (job.get("url") or "").strip()
+                                            if not job_url:
+                                                continue
+                                            key = _asset_key(job)
+                                            assets = job_assets.get(job_url) or job_assets.get(key) or {}
+                                            resume_path = assets.get("resume") or resume_default
+                                            cover_path = assets.get("cover_letter") or cover_default
+                                            if resume_path:
+                                                resume_path = str(Path(resume_path).expanduser())
+                                            if cover_path:
+                                                cover_path = str(Path(cover_path).expanduser())
+                                            print(f"[autofill] Attempting Greenhouse autofill for {job.get('company','?')} - {job.get('title','?')}")
+                                            try:
+                                                gh.fill_application(job_url, resume_path=resume_path, cover_letter_path=cover_path)
+                                                job["autofill_status"] = "success"
+                                                applied += 1
+                                                state["used"] = int(state.get("used", 0)) + 1  # type: ignore[index]
+                                                remaining_budget -= 1
+                                                _save_daily_state(state)
+                                            except Exception as e:
+                                                job["autofill_status"] = f"error: {e}"
+                                                print(f"[autofill] Greenhouse failed for {job_url}: {e}")
+                                # Apply Lever
+                                if lv_jobs:
+                                    with SimpleLeverAutofill(_driver_factory2, portal_profile, wait_seconds=wait_seconds, verbose=True) as lv:
+                                        applied = 0
+                                        for job in lv_jobs:
+                                            if applied >= max_jobs or remaining_budget <= 0:
+                                                break
+                                            job_url = (job.get("url") or "").strip()
+                                            if not job_url:
+                                                continue
+                                            key = _asset_key(job)
+                                            assets = job_assets.get(job_url) or job_assets.get(key) or {}
+                                            resume_path = assets.get("resume") or resume_default
+                                            cover_path = assets.get("cover_letter") or cover_default
+                                            if resume_path:
+                                                resume_path = str(Path(resume_path).expanduser())
+                                            if cover_path:
+                                                cover_path = str(Path(cover_path).expanduser())
+                                            print(f"[autofill] Attempting Lever autofill for {job.get('company','?')} - {job.get('title','?')}")
+                                            try:
+                                                lv.fill_application(job_url, resume_path=resume_path, cover_letter_path=cover_path)
+                                                job["autofill_status"] = "success"
+                                                applied += 1
+                                                state["used"] = int(state.get("used", 0)) + 1  # type: ignore[index]
+                                                remaining_budget -= 1
+                                                _save_daily_state(state)
+                                            except Exception as e:
+                                                job["autofill_status"] = f"error: {e}"
+                                                print(f"[autofill] Lever failed for {job_url}: {e}")
+                            except Exception as e:
+                                print(f"[autofill] Unable to start Greenhouse/Lever automation: {e}")
     # Print filtering summary
     print("\n" + "="*80)
     print("📊 JOB FILTERING & RESUME GENERATION SUMMARY")

@@ -162,12 +162,19 @@
   },
   "autofill": {
     "enabled": false,
-    "providers": ["workday"],
+    "providers": ["workday", "greenhouse", "lever"],
     "max_jobs": 1,
     "headless": false,
     "wait_seconds": 25,
-  "resume_path": "input/resume.yml",
+    "resume_path": "input/resume.yml",
     "cover_letter_path": "",
+    "login": {
+      "username": "",
+      "password": ""
+    },
+    "create_account": {
+      "enabled": true
+    },
     "profile": {
       "first_name": "Bhavana",
       "last_name": "Nare",
