@@ -5,7 +5,7 @@
   "fetch_limit": 100,
   "min_score": 40,
   "top_per_company": true,
-  "top_per_company_limit": 3,
+  "top_per_company_limit": 2,
   "parallel_workers": 5,
   "run_both": true,
   "selenium_only": true,
@@ -28,11 +28,6 @@
     "cybersecurity engineer"
   ],
   "target_locations": [],
-  "free_options": {
-    "mode": "free",
-    "source": "remoteok",
-    "query": ""
-  },
   "serpapi_key": "",
   "selenium_options": {
     "enabled": true,
@@ -139,7 +134,7 @@
         "wait_selector": "div[class*='job-card'], article[class*='job']"
       },
       {
-        "url": "https://careers.oracle.com/jobs/#en/sites/jobsearch/requisitions?keyword=software%20engineer&location=United%20States",
+        "url": "https://careers.oracle.com/jobs/#en/sites/jobsearch",
         "company": "oracle",
         "list_selector": "a[data-ui='requisition-item'], li[data-ui='requisition-item'], div[class*='job'] a[href*='/job/'], tr[data-ui='requisition-item']",
         "title_selector": "[data-ui='job-title'], span[class*='job-title'], h3, h4, a[href*='/job/'], td[data-ui='job-title']",
