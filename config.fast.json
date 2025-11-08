@@ -2,9 +2,10 @@
   "resume": "input/resume.txt",
   "top": 10,
   "country": "usa",
-  "fetch_limit": 50,
-  "min_score": 65,
+  "fetch_limit": 10,
+  "min_score": 50,
   "top_per_company": true,
+  "parallel_workers": 7,
   "run_both": false,
   "selenium_only": true,
   "save_fetched": true,
@@ -86,7 +87,7 @@
         "wait_selector": "a[href*='/jobs/']"
       },
       {
-        "url": "https://www.google.com/about/careers/applications/jobs/results/?location=United%20States&q=software%20engineer",
+        "url": "https://www.google.com/about/careers/applications/jobs/results/",
         "company": "google",
         "list_selector": "li[class*='lLd3Je']",
         "title_selector": "h2, h3",
@@ -100,7 +101,7 @@
         "wait_selector": "li[class*='lLd3Je']"
       },
       {
-        "url": "https://www.amazon.jobs/en/search?base_query=software+engineer&loc_query=United+States",
+        "url": "https://www.amazon.jobs/en/search",
         "company": "amazon",
         "list_selector": "div[class*='job-tile']",
         "title_selector": "h3, a[class*='title']",
@@ -114,7 +115,7 @@
         "wait_selector": "div[class*='job-tile']"
       },
       {
-        "url": "https://careers.microsoft.com/us/en/search-results?keywords=software%20engineer",
+        "url": "https://careers.microsoft.com/us/en/search-results",
         "company": "microsoft",
         "list_selector": "article, div[class*='job']",
         "title_selector": "h2, h3, a[class*='title']",
@@ -128,7 +129,7 @@
         "wait_selector": "article, div[class*='job']"
       },
       {
-        "url": "https://jobs.netflix.com/search?q=engineer&l=United%20States",
+        "url": "https://jobs.netflix.com/search",
         "company": "netflix",
         "list_selector": "div[class*='job-card']",
         "title_selector": "h3, a[class*='title']",
@@ -172,7 +173,7 @@
     "model": "gpt-4o-mini"
   },
   "auto_tailor_resume": true,
-  "tailor_threshold": 40,
+  "tailor_threshold": 50,
   "cover_letter": {
     "resume": "input/resume.txt",
     "jd": "input/jd.txt",

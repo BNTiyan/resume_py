@@ -8,6 +8,7 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from pathlib import Path
 from typing import Any
+from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from dotenv import load_dotenv
 except Exception:
@@ -673,39 +674,27 @@ def main() -> None:
             
             # Filter jobs by score threshold FIRST to avoid wasting time
             score_threshold = float(resolved_cfg.get("min_score", 60))
-            target_roles = resolved_cfg.get("target_roles", [])
             target_locations = resolved_cfg.get("target_locations", [])
             top_per_company = bool(resolved_cfg.get("top_per_company", False))
             
+            print(f"[filter] Starting with {len(top[:100])} jobs")
             print(f"[filter] Filtering jobs with score >= {score_threshold}")
-            if target_roles:
-                print(f"[filter] Target roles: {', '.join(target_roles)}")
             if target_locations:
-                print(f"[filter] Target locations: {', '.join(target_locations[:5])}{'...' if len(target_locations) > 5 else ''}")
+                print(f"[filter] Target locations: {', '.join(target_locations)}")
             if top_per_company:
                 print(f"[filter] Top per company mode: Will select only highest scoring job from each company")
             
             # Filter by score
             filtered_jobs = [j for j in top[:100] if j.get("score", 0) >= score_threshold]
+            print(f"[filter] After score filter: {len(filtered_jobs)} jobs (removed {len(top[:100]) - len(filtered_jobs)})")
             
-            # Additionally filter by target roles if specified
-            if target_roles and filtered_jobs:
-                role_matched_jobs = []
-                for j in filtered_jobs:
-                    job_title = (j.get("title") or "").lower()
-                    # Check if job title contains any of the target roles
-                    for target_role in target_roles:
-                        if target_role.lower() in job_title:
-                            role_matched_jobs.append(j)
-                            break
-                
-                if role_matched_jobs:
-                    print(f"[filter] {len(role_matched_jobs)} jobs match target roles (out of {len(filtered_jobs)} above score threshold)")
-                    filtered_jobs = role_matched_jobs
-                else:
-                    print(f"[filter] WARNING: No jobs match target roles. Processing all {len(filtered_jobs)} jobs above score threshold.")
+            # Debug: Show sample of filtered jobs
+            if filtered_jobs:
+                print(f"[filter] Sample jobs after score filter:")
+                for j in filtered_jobs[:3]:
+                    print(f"  - {j.get('company', 'N/A')}: {j.get('title', 'N/A')} (score: {j.get('score', 0)}, location: {j.get('location', 'N/A')})")
             
-            # Additionally filter by target locations if specified
+            # Filter by location if specified (AFTER fetching, not in URL)
             if target_locations and filtered_jobs:
                 location_matched_jobs = []
                 for j in filtered_jobs:
@@ -717,7 +706,7 @@ def main() -> None:
                             break
                 
                 if location_matched_jobs:
-                    print(f"[filter] {len(location_matched_jobs)} jobs match target locations (out of {len(filtered_jobs)})")
+                    print(f"[filter] After location filter: {len(location_matched_jobs)} jobs (removed {len(filtered_jobs) - len(location_matched_jobs)})")
                     filtered_jobs = location_matched_jobs
                 else:
                     print(f"[filter] WARNING: No jobs match target locations. Processing all {len(filtered_jobs)} jobs.")
@@ -726,9 +715,17 @@ def main() -> None:
             if top_per_company and filtered_jobs:
                 company_best = {}
                 for j in filtered_jobs:
+                    # Get company name, fallback to source if not specified
                     company = (j.get("company") or "").lower().strip()
+                    if not company or company == "not specified" or company == "not specified.":
+                        # Try to extract from source (e.g., "selenium:google" -> "google")
+                        source = j.get("source", "")
+                        if ":" in source:
+                            company = source.split(":")[-1].strip()
+                    
                     if not company:
                         continue
+                    
                     score = j.get("score", 0)
                     if company not in company_best or score > company_best[company]["score"]:
                         company_best[company] = j
@@ -736,25 +733,13 @@ def main() -> None:
                 filtered_jobs = list(company_best.values())
                 # Sort by score descending
                 filtered_jobs.sort(key=lambda x: x.get("score", 0), reverse=True)
-                print(f"[filter] Selected top job from {len(company_best)} companies")
+                print(f"[filter] After top-per-company: {len(filtered_jobs)} jobs from {len(company_best)} companies")
             
             if not filtered_jobs:
-                print(f"[filter] WARNING: No jobs after filtering. Lowering score to 40.")
+                print(f"[filter] WARNING: No jobs above score threshold {score_threshold}. Lowering to 40.")
                 filtered_jobs = [j for j in top[:100] if j.get("score", 0) >= 40]
                 
-                # Try role filtering again with lowered score threshold
-                if target_roles and filtered_jobs:
-                    role_matched_jobs = []
-                    for j in filtered_jobs:
-                        job_title = (j.get("title") or "").lower()
-                        for target_role in target_roles:
-                            if target_role.lower() in job_title:
-                                role_matched_jobs.append(j)
-                                break
-                    if role_matched_jobs:
-                        filtered_jobs = role_matched_jobs
-                
-                # Try location filtering again
+                # Try location filtering again with lowered threshold
                 if target_locations and filtered_jobs:
                     location_matched_jobs = []
                     for j in filtered_jobs:
@@ -770,9 +755,17 @@ def main() -> None:
                 if top_per_company and filtered_jobs:
                     company_best = {}
                     for j in filtered_jobs:
+                        # Get company name, fallback to source if not specified
                         company = (j.get("company") or "").lower().strip()
+                        if not company or company == "not specified" or company == "not specified.":
+                            # Try to extract from source (e.g., "selenium:google" -> "google")
+                            source = j.get("source", "")
+                            if ":" in source:
+                                company = source.split(":")[-1].strip()
+                        
                         if not company:
                             continue
+                        
                         score = j.get("score", 0)
                         if company not in company_best or score > company_best[company]["score"]:
                             company_best[company] = j
@@ -781,9 +774,106 @@ def main() -> None:
             
             print(f"[filter] Processing {len(filtered_jobs)} jobs (out of {len(top[:100])} total)")
             
+            if not filtered_jobs:
+                print(f"[filter] ❌ NO JOBS TO PROCESS after all filters!")
+                print(f"[filter] This means no cover letters or resumes will be generated.")
+            else:
+                print(f"[filter] ✅ Will generate cover letters and resumes for these {len(filtered_jobs)} jobs:")
+                for idx, j in enumerate(filtered_jobs, 1):
+                    print(f"  {idx}. {j.get('company', 'N/A')} - {j.get('title', 'N/A')[:50]} (score: {j.get('score', 0):.1f})")
+            
+            # Pre-fetch job descriptions in parallel for speed
+            def fetch_job_desc(job):
+                """Fetch and enrich job description in parallel."""
+                job_url = (job.get("url") or "").strip()
+                company = (job.get("company") or "").strip() or "Company"
+                role = (job.get("title") or "").strip() or "Role"
+                jd_text = (job.get("description") or "").strip()
+                
+                if not job_url:
+                    print(f"  [parallel-fetch] {company}: No URL, skipping fetch")
+                    return job
+                
+                print(f"  [parallel-fetch] {company}: Starting fetch from {job_url[:60]}...")
+                
+                # ALWAYS try HTML parser first (best quality)
+                if LLM_JOB_HTML_PARSER_AVAILABLE and use_openai and openai_key:
+                    try:
+                        headers = {
+                            "User-Agent": (
+                                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+                            )
+                        }
+                        resp = requests.get(job_url, timeout=30, headers=headers)
+                        resp.raise_for_status()
+                        html_content = resp.text
+                        job_html_parser = LLMJobHTMLParser(openai_key)
+                        job_html_parser.set_body_html(html_content)
+                        extracted_desc = job_html_parser.extract_job_description()
+                        if extracted_desc and len(extracted_desc) > 100:
+                            job["description"] = extracted_desc.strip()
+                            print(f"  [parallel-fetch] {company}: ✅ {len(extracted_desc)} chars (HTML parser)")
+                            return job
+                        else:
+                            print(f"  [parallel-fetch] {company}: HTML parser returned short/empty result")
+                    except Exception as e:
+                        print(f"  [parallel-fetch] {company}: HTML parser failed: {e}")
+                
+                # Fallback to plain text fetch (strip HTML tags)
+                try:
+                    fallback_desc = fetch_job_description_plain(job_url)
+                    if fallback_desc and len(fallback_desc) > 100:
+                        job["description"] = fallback_desc
+                        print(f"  [parallel-fetch] {company}: ✅ {len(fallback_desc)} chars (plain text)")
+                        return job
+                    else:
+                        print(f"  [parallel-fetch] {company}: Plain text fetch returned short/empty result")
+                except Exception as e:
+                    print(f"  [parallel-fetch] {company}: Plain fetch failed: {e}")
+                
+                # If still no description, create minimal one from title/company
+                if not job.get("description") or len(job.get("description", "")) < 50:
+                    minimal_desc = f"Position: {role} at {company}. Application URL: {job_url}"
+                    job["description"] = minimal_desc
+                    print(f"  [parallel-fetch] {company}: ⚠️ Using minimal description ({len(minimal_desc)} chars)")
+                
+                return job
+            
+            # Parallel fetch job descriptions
+            if filtered_jobs:
+                parallel_workers = int(resolved_cfg.get("parallel_workers", 5))
+                parallel_workers = min(parallel_workers, len(filtered_jobs))  # Don't create more workers than jobs
+                print(f"[parallel] Pre-fetching job descriptions with {parallel_workers} workers...")
+                with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
+                    # Submit all jobs for parallel fetching
+                    future_to_idx = {executor.submit(fetch_job_desc, j): i for i, j in enumerate(filtered_jobs)}
+                    
+                    # Wait for all to complete and update the jobs list
+                    for future in as_completed(future_to_idx):
+                        idx = future_to_idx[future]
+                        try:
+                            updated_job = future.result()
+                            filtered_jobs[idx] = updated_job
+                        except Exception as e:
+                            print(f"  [parallel-fetch] Error processing job {idx}: {e}")
+                
+                print(f"[parallel] Job description fetching complete!")
+            
             for idx, j in enumerate(filtered_jobs):
                 score = j.get("score", 0)
-                company = (j.get("company") or "").strip() or "Company"
+                company = (j.get("company") or "").strip()
+                
+                # Fix company name if not specified
+                if not company or company.lower() in ["not specified", "not specified."]:
+                    source = j.get("source", "")
+                    if ":" in source:
+                        company = source.split(":")[-1].strip().title()
+                        j["company"] = company  # Update the job object
+                
+                if not company:
+                    company = "Company"
+                
                 role = (j.get("title") or "").strip() or "Role"
                 jd_text = (j.get("description") or "").strip()
                 job_url = (j.get("url") or "").strip()
@@ -1046,7 +1136,13 @@ def main() -> None:
                 
                 # Method 1: JobApplicationGenerator (unified, preferred)
                 jobgen_success = False
-                print(f"  [debug] Checking jobgen: use_job_app_gen={use_job_app_gen}, auto_tailor={auto_tailor}, jd_len={len(jd_text)}")
+                jd_len = len(jd_text)
+                print(f"  [debug] Job processing for {company}:")
+                print(f"    - use_job_app_gen: {use_job_app_gen}")
+                print(f"    - auto_tailor: {auto_tailor}")
+                print(f"    - jd_len: {jd_len}")
+                print(f"    - job_url: {job_url}")
+                
                 if use_job_app_gen and auto_tailor and jd_text:
                     try:
                         print(f"  [jobgen] Generating application package for {company}...")
@@ -1058,6 +1154,7 @@ def main() -> None:
                             with open(resume_path, "w", encoding="utf-8") as f:
                                 f.write(result["resume"])
                             assets["resume"] = str(resume_path)
+                            print(f"  [jobgen] ✅ Resume saved: {resume_path.name}")
                         
                         # Save cover letter
                         if result.get("cover_letter"):
@@ -1065,6 +1162,7 @@ def main() -> None:
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(result["cover_letter"])
                             assets["cover_letter"] = str(txt_path)
+                            print(f"  [jobgen] ✅ Cover letter saved: {txt_path.name}")
                         
                         # Optionally save job summary
                         if result.get("job_summary"):
@@ -1074,10 +1172,17 @@ def main() -> None:
                             with open(summary_path, "w", encoding="utf-8") as f:
                                 f.write(result["job_summary"])
                             assets["job_summary"] = str(summary_path)
+                            print(f"  [jobgen] ✅ Job summary saved: {summary_path.name}")
                         
                         jobgen_success = True
                     except Exception as e:
-                        print(f"  [jobgen] Error for {company}: {e}. Falling back.")
+                        print(f"  [jobgen] ❌ Error for {company}: {e}. Falling back.")
+                elif not jd_text:
+                    print(f"  [jobgen] ⚠️  Skipping {company} - No job description available")
+                elif not auto_tailor:
+                    print(f"  [jobgen] ⚠️  Skipping {company} - auto_tailor is disabled")
+                elif not use_job_app_gen:
+                    print(f"  [jobgen] ⚠️  Skipping {company} - JobApplicationGenerator not available")
                 
                 if jobgen_success:
                     if should_force_llm_resume and not llm_resume_generated:

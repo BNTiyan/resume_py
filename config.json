@@ -2,9 +2,10 @@
   "resume": "input/resume.txt",
   "top": 15,
   "country": "usa",
-  "fetch_limit": 100,
-  "min_score": 60,
+  "fetch_limit": 10,
+  "min_score": 50,
   "top_per_company": true,
+  "parallel_workers": 5,
   "run_both": true,
   "selenium_only": true,
   "save_fetched": true,
@@ -42,7 +43,7 @@
     "enabled": true,
     "sites": [
       {
-        "url": "https://www.uber.com/us/en/careers/list/?department=Engineering",
+        "url": "https://www.uber.com/us/en/careers/list/",
         "company": "uber",
         "list_selector": "div[data-testid='job-card'], li[class*='job'], a[href*='/jobs/']",
         "title_selector": "h3, h4, [class*='title']",
@@ -58,7 +59,7 @@
         "wait_selector": "div[data-testid='job-card'], li[class*='job']"
       },
       {
-        "url": "https://jobs.apple.com/en-us/search?location=united-states-USA&team=software-and-services-SFTWR+machine-learning-and-ai-MLAI",
+        "url": "https://jobs.apple.com/en-us/search",
         "company": "apple",
         "list_selector": "tr[id*='job-']",
         "title_selector": "a[id*='job-title']",
@@ -72,7 +73,7 @@
         "sleep_seconds": 2
       },
       {
-        "url": "https://www.metacareers.com/jobs?q=software%20engineer&teams[0]=Engineering&offices[0]=Remote%2C%20US&offices[1]=Menlo%20Park%2C%20CA&offices[2]=New%20York%2C%20NY&offices[3]=Seattle%2C%20WA",
+        "url": "https://www.metacareers.com/jobs",
         "company": "meta",
         "list_selector": "a[href*='/jobs/']",
         "title_selector": "div[class*='title'], span[class*='title']",
@@ -86,7 +87,7 @@
         "wait_selector": "a[href*='/jobs/']"
       },
       {
-        "url": "https://www.google.com/about/careers/applications/jobs/results/?location=United%20States&q=software%20engineer",
+        "url": "https://www.google.com/about/careers/applications/jobs/results/",
         "company": "google",
         "list_selector": "li[class*='lLd3Je']",
         "title_selector": "h2, h3",
@@ -100,7 +101,7 @@
         "wait_selector": "li[class*='lLd3Je']"
       },
       {
-        "url": "https://www.amazon.jobs/en/search?base_query=software+engineer&loc_query=United+States&business_category[]=amazon-web-services",
+        "url": "https://www.amazon.jobs/en/search",
         "company": "amazon",
         "list_selector": "div[class*='job-tile']",
         "title_selector": "h3, a[class*='title']",
@@ -114,7 +115,7 @@
         "wait_selector": "div[class*='job-tile']"
       },
       {
-        "url": "https://careers.microsoft.com/us/en/search-results?keywords=software%20engineer",
+        "url": "https://careers.microsoft.com/us/en/search-results",
         "company": "microsoft",
         "list_selector": "article, div[class*='job']",
         "title_selector": "h2, h3, a[class*='title']",
@@ -128,7 +129,7 @@
         "wait_selector": "article, div[class*='job']"
       },
       {
-        "url": "https://jobs.netflix.com/search?q=engineer&l=United%20States",
+        "url": "https://jobs.netflix.com/search",
         "company": "netflix",
         "list_selector": "div[class*='job-card']",
         "title_selector": "h3, a[class*='title']",
@@ -172,7 +173,7 @@
     "model": "gpt-4o-mini"
   },
   "auto_tailor_resume": true,
-  "tailor_threshold": 40,
+  "tailor_threshold": 50,
   "cover_letter": {
     "resume": "input/resume.txt",
     "jd": "input/jd.txt",
