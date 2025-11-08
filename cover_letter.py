@@ -81,6 +81,10 @@ class CoverLetterBuilder:
         return score
 
     def build_docx(self, company: str, role: str, jd_text: str) -> Document:
+        # Normalize inputs
+        company = _normalize_meta_field(company)
+        role = _normalize_meta_field(role)
+        
         doc = Document()
         today = datetime.now().strftime("%B %d, %Y")
         ats = self.compute_ats_score(jd_text)

@@ -15,6 +15,17 @@ from datetime import datetime
 import re
 
 
+def _normalize_meta_field(value: str | None) -> str:
+    """Normalize company/role/location fields, stripping placeholder text."""
+    if not value:
+        return ""
+    cleaned = value.strip()
+    lowered = cleaned.lower()
+    if lowered in {"not specified", "not specified."}:
+        return ""
+    return cleaned
+
+
 class PDFGenerator:
     """Generate professional PDF documents for resumes and cover letters"""
     
@@ -154,11 +165,11 @@ class PDFGenerator:
                 story.append(Paragraph(contact_text, self.styles['ContactInfo']))
             
             # Target position (only if both are provided and not "Not specified")
-            if (job_title and company_name and 
-                job_title.lower() not in ("not specified", "not specified.") and
-                company_name.lower() not in ("not specified", "not specified.")):
+            job_title_normalized = _normalize_meta_field(job_title)
+            company_name_normalized = _normalize_meta_field(company_name)
+            if job_title_normalized and company_name_normalized:
                 story.append(Paragraph(
-                    f"<b>Target Position:</b> {job_title} at {company_name}",
+                    f"<b>Target Position:</b> {job_title_normalized} at {company_name_normalized}",
                     self.styles['Normal']
                 ))
                 story.append(Spacer(1, 0.2*inch))
@@ -406,17 +417,17 @@ class PDFGenerator:
             ))
             story.append(Spacer(1, 0.2*inch))
             
-            # Hiring manager address
-            if company_name:
-                story.append(Paragraph(f"Hiring Manager<br/>{company_name}", self.styles['Normal']))
+            # Hiring manager address (only if company name is valid and not "Not specified")
+            company_name_normalized = _normalize_meta_field(company_name)
+            if company_name_normalized:
+                story.append(Paragraph(f"Hiring Manager<br/>{company_name_normalized}", self.styles['Normal']))
                 story.append(Spacer(1, 0.2*inch))
             
             # Subject line (only if both are provided and not "Not specified")
-            if (job_title and company_name and 
-                job_title.lower() not in ("not specified", "not specified.") and
-                company_name.lower() not in ("not specified", "not specified.")):
+            job_title_normalized = _normalize_meta_field(job_title)
+            if (job_title_normalized and company_name_normalized):
                 story.append(Paragraph(
-                    f"<b>Re: Application for {job_title} Position</b>",
+                    f"<b>Re: Application for {job_title_normalized} Position</b>",
                     self.styles['Normal']
                 ))
                 story.append(Spacer(1, 0.2*inch))
