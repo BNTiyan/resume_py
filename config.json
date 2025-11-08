@@ -33,13 +33,7 @@
     "source": "remoteok",
     "query": ""
   },
-  "company_options": {
-    "mode": "company",
-    "company_source": "lever",
-    "companies": ["uber", "apple", "meta", "oracle"],
-    "query": ""
-  },
-  "location": "",
+  "location": "usa",
   "jobs": "",
   "jobs_url": "",
   "serpapi_key": "",
