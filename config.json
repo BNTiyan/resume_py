@@ -10,17 +10,7 @@
   "selenium_only": true,
   "save_fetched": true,
   "companies": ["uber", "apple", "meta", "google", "amazon", "microsoft", "netflix"],
-  "target_roles": [
-    "software engineer",
-    "senior software engineer",
-    "python developer",
-    "mlops engineer",
-    "machine learning engineer",
-    "cybersecurity engineer",
-    "backend engineer",
-    "data engineer",
-    "devops engineer"
-  ],
+  "target_roles": [],
   "target_locations": [],
   "free_options": {
     "mode": "free",
