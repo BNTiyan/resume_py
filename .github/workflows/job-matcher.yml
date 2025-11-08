@@ -45,7 +45,7 @@ jobs:
           chrome-version: stable
 
       - name: Run matcher with config
-        timeout-minutes: 20  # Timeout after 20 minutes
+        timeout-minutes: 40  # Timeout after 20 minutes
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
