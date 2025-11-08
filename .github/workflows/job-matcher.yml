@@ -267,8 +267,10 @@ jobs:
           if [ -d "output/tailored_resumes" ]; then
             RES_TXT_COUNT=$(find output/tailored_resumes -name "*.txt" 2>/dev/null | wc -l)
             RES_PDF_COUNT=$(find output/tailored_resumes -name "*.pdf" 2>/dev/null | wc -l)
+            RES_DOCX_COUNT=$(find output/tailored_resumes -name "*.docx" 2>/dev/null | wc -l)
             echo "- **Tailored Resumes (TXT)**: $RES_TXT_COUNT" >> $GITHUB_STEP_SUMMARY
             echo "- **Tailored Resumes (PDF)**: $RES_PDF_COUNT" >> $GITHUB_STEP_SUMMARY
+            echo "- **Tailored Resumes (DOCX)**: $RES_DOCX_COUNT" >> $GITHUB_STEP_SUMMARY
           fi
           
           if [ -d "output/parsed_jobs" ]; then
