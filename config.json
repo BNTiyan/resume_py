@@ -10,7 +10,7 @@
   "run_both": true,
   "selenium_only": true,
   "save_fetched": true,
-  "companies": ["uber", "apple", "meta", "google", "amazon", "microsoft", "netflix", "oracle"],
+  "companies": [],
   "target_roles": [
     "software engineer",
     "senior software engineer",
