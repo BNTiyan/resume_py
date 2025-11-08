@@ -1,41 +1,90 @@
-name: daily-autofill
-
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 12 * * *"
-
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          # Optional: install browser for JS-rendered pages; ignore failures
-          python -m playwright install chromium || true
-
-      - name: Run daily autofill
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: |
-          python match.py --config config.autofill.json
-
-      - name: Upload output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: autofill-output
-          path: |
-            output/
+{
+  "resume": "input/resume.yml",
+  "top": 100,
+  "country": "usa",
+  "fetch_limit": 100,
+  "min_score": 40,
+  "top_per_company": true,
+  "top_per_company_limit": 1,
+  "parallel_workers": 5,
+  "run_both": true,
+  "selenium_only": true,
+  "save_fetched": true,
+  "companies": [],
+  "target_roles": [
+    "software engineer",
+    "senior software engineer",
+    "principal software engineer",
+    "staff software engineer",
+    "machine learning engineer",
+    "ml engineer",
+    "mlops engineer",
+    "data engineer",
+    "backend engineer",
+    "full stack engineer",
+    "cloud engineer",
+    "devops engineer",
+    "site reliability engineer",
+    "cybersecurity engineer"
+  ],
+  "target_locations": [],
+  "free_options": {
+    "mode": "free",
+    "source": "remoteok",
+    "query": ""
+  },
+  "serpapi_key": "",
+  "selenium_options": {
+    "enabled": true,
+    "sites": []
+  },
+  "output": {
+    "dir": "output",
+    "prefix": "autofill_daily"
+  },
+  "autofill": {
+    "enabled": true,
+    "providers": ["greenhouse", "lever"],
+    "max_jobs": 10,
+    "daily_limit": 10,
+    "headless": true,
+    "wait_seconds": 20,
+    "resume_path": "",
+    "cover_letter_path": "",
+    "login": {
+      "username": "",
+      "password": ""
+    },
+    "create_account": {
+      "enabled": false
+    },
+    "profile": {
+      "first_name": "Bhavana",
+      "last_name": "Nare",
+      "email": "n.bhavana.reddy5@gmail.com",
+      "phone": "7067159912",
+      "address": "",
+      "postal_code": "",
+      "country": "United States"
+    }
+  },
+  "openai": {
+    "enabled": true,
+    "model": "gpt-4o-mini"
+  },
+  "auto_tailor_resume": true,
+  "tailor_threshold": 40,
+  "cover_letter": {
+    "resume": "input/resume.yml",
+    "jd": "input/jd.txt",
+    "name": "Bhavana Nare",
+    "company": "",
+    "role": "",
+    "out": "output/cover_letter.docx"
+  },
+  "resume_builder": {
+    "personal_information": "Bhavana Nare | 7067159912 | n.bhavana.reddy5@gmail.com | linkedin.com/in/bhavana-nare-60657385 | github.com/Bhavana5N",
+    "out": "output/resume_enhanced.docx"
+  }
+}
 
