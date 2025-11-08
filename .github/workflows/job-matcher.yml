@@ -22,7 +22,7 @@ concurrency:
 jobs:
   match-jobs:
     runs-on: ubuntu-latest
-    timeout-minutes: 30  # Kill job if it runs longer than 30 minutes
+    timeout-minutes: 40  # Kill job if it runs longer than 40 minutes
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
           chrome-version: stable
 
       - name: Run matcher with config
-        timeout-minutes: 120  # Timeout after 20 minutes
+        timeout-minutes: 35  # Timeout after 35 minutes
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -54,15 +54,15 @@ jobs:
         run: |
           echo "🚀 Starting job matcher..."
           echo "Config: ${{ inputs.config_path || 'config.json' }}"
-          echo "⏰ Timeout: 20 minutes"
+          echo "⏰ Timeout: 35 minutes"
           echo ""
           
-          # Run with verbose output and timeout
-          timeout python match.py --config "${{ inputs.config_path || 'config.json' }}" 2>&1 | tee match.log || {
+          # Run with verbose output and timeout (2100 seconds = 35 minutes)
+          timeout 2100 python match.py --config "${{ inputs.config_path || 'config.json' }}" 2>&1 | tee match.log || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
               echo ""
-              echo "❌ ERROR: Process timed out after 20 minutes!"
+              echo "❌ ERROR: Process timed out after 35 minutes!"
               echo "This usually means:"
               echo "  - Too many jobs to process"
               echo "  - Selenium pages taking too long to load"
