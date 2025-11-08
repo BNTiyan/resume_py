@@ -207,15 +207,19 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
             # Debug: counts per site
             try:
                 print(f"[selenium] {source} containers={len(items)} url={url}")
+                print(f"[selenium-debug] Selectors: link='{link_sel}', title='{title_sel}', list='{list_sel}', item='{item_sel}'")
             except Exception:
                 pass
 
+            processed_count = 0
             for idx, elem in enumerate(items):
                 try:
+                    processed_count += 1
                     title = ""
                     location = ""
                     link = ""
                     description = ""
+                    
                     # Title
                     if title_sel:
                         t_nodes = elem.find_elements(By.CSS_SELECTOR, title_sel)
@@ -224,38 +228,101 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
                     else:
                         txt = getattr(elem, 'text', '') or ''
                         title = txt.strip()
+                    
                     # Location
                     if loc_sel:
                         l_nodes = elem.find_elements(By.CSS_SELECTOR, loc_sel)
                         if l_nodes:
                             location = l_nodes[0].text.strip()
+                    
                     # Description
                     if desc_sel:
                         d_nodes = elem.find_elements(By.CSS_SELECTOR, desc_sel)
                         if d_nodes:
                             description = d_nodes[0].text.strip()
-                    # Link
-                    l_nodes = elem.find_elements(By.CSS_SELECTOR, link_sel) if link_sel else []
-                    if l_nodes:
-                        link = l_nodes[0].get_attribute("href") or ""
+                    
+                    # Link extraction - try multiple methods
+                    # Method 1: Use link_selector
+                    if link_sel:
+                        l_nodes = elem.find_elements(By.CSS_SELECTOR, link_sel)
+                        if l_nodes:
+                            link = l_nodes[0].get_attribute("href") or ""
+                            if link:
+                                print(f"  [selenium-debug] Method 1 (link_sel) found: {link[:80]}")
+                    
+                    # Method 2: Check if element itself is a link
                     if not link and hasattr(elem, 'get_attribute'):
                         link = elem.get_attribute('href') or ""
+                        if link:
+                            print(f"  [selenium-debug] Method 2 (elem href) found: {link[:80]}")
+                    
+                    # Method 3: Find anchor tag within element
+                    if not link:
+                        try:
+                            anchors = elem.find_elements(By.TAG_NAME, "a")
+                            if anchors:
+                                for anchor in anchors:
+                                    href = anchor.get_attribute("href") or ""
+                                    if href:
+                                        link = href
+                                        print(f"  [selenium-debug] Method 3 (anchor tag) found: {link[:80]}")
+                                        break
+                        except Exception as e:
+                            print(f"  [selenium-debug] Method 3 failed: {e}")
+                    
+                    # Method 4: If element is clickable, try to get URL from onclick or data attributes
+                    if not link:
+                        try:
+                            onclick = elem.get_attribute("onclick") or ""
+                            if onclick and "http" in onclick:
+                                import re
+                                urls = re.findall(r'https?://[^\s\'"]+', onclick)
+                                if urls:
+                                    link = urls[0]
+                                    print(f"  [selenium-debug] Method 4 (onclick) found: {link[:80]}")
+                        except Exception:
+                            pass
+                    
+                    # Method 5: Check data attributes
+                    if not link:
+                        try:
+                            for attr in ['data-url', 'data-href', 'data-link', 'href']:
+                                data_url = elem.get_attribute(attr) or ""
+                                if data_url and data_url.startswith('http'):
+                                    link = data_url
+                                    print(f"  [selenium-debug] Method 5 (data-{attr}) found: {link[:80]}")
+                                    break
+                        except Exception:
+                            pass
+                    
                     # Normalize relative links
                     if link and absolute_base and link.startswith('/'):
                         link = urljoin(absolute_base, link)
+                    
                     # Domain/path filters
-                    if domain_filter:
+                    if domain_filter and link:
                         try:
                             netloc = urlparse(link).netloc
                             if domain_filter not in netloc:
+                                print(f"  [selenium-debug] Skipping link (domain filter): {link[:60]}...")
                                 continue
                         except Exception:
                             pass
+                    
                     if require_path_contains and (require_path_contains not in (link or '')):
+                        print(f"  [selenium-debug] Skipping link (path filter): {link[:60]}...")
                         continue
+                    
                     # Skip if no title
                     if not title:
+                        print(f"  [selenium-debug] Skipping item {idx+1} (no title), link: {link[:60] if link else 'N/A'}...")
                         continue
+                    
+                    # Debug: Log URL extraction result
+                    if not link:
+                        print(f"  [selenium-debug] ⚠️ Item {idx+1}/{len(items)}: No URL extracted for '{title[:50]}' (company: {site.get('company', 'N/A')})")
+                    else:
+                        print(f"  [selenium-debug] ✅ Item {idx+1}/{len(items)}: Extracted URL: {link[:80]} for '{title[:50]}'")
                     
                     # If no description from list page, try to fetch from job detail page
                     if not description and link and site.get("fetch_description_from_link"):
@@ -271,19 +338,31 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
                         except Exception as e:
                             print(f"  [selenium] failed to fetch description from {link}: {e}")
                     
+                    # Only add if we have a valid link (don't use careers_url as fallback)
+                    if not link:
+                        print(f"  [selenium-debug] ⚠️ Skipping job (no URL): {title[:50]}")
+                        continue
+                    
                     results.append({
                         "title": title,
                         "company": site.get("company") or "",
                         "location": location,
                         "description": description,
-                        "url": link or url,
+                        "url": link,  # Use extracted link, don't fallback to careers_url
                         "careers_url": careers_url,
                         "source": source,
                     })
+                    print(f"  [selenium-debug] ✅ Added job {len(results)}: {title[:50]} -> {link[:80]}")
                     if len(results) >= fetch_limit:
+                        print(f"[selenium-debug] Reached fetch_limit ({fetch_limit}), stopping")
                         return results
-                except Exception:
+                except Exception as e:
+                    print(f"  [selenium-debug] ❌ Error processing item {idx+1}: {type(e).__name__}: {e}")
+                    import traceback
+                    print(f"  [selenium-debug] Traceback: {traceback.format_exc()[:200]}")
                     continue
+            
+            print(f"[selenium-debug] Processed {processed_count} items from {len(items)} containers, extracted {len(results)} jobs with URLs")
     finally:
         try:
             driver.quit()
@@ -315,7 +394,7 @@ def build_selenium_sites_from_company_opts(company_opts: dict[str, Any]) -> list
         headers = {"User-Agent": "Mozilla/5.0 (compatible; JobMatcher/1.0)"}
         for c in candidates:
             try:
-                r = requests.get(c, headers=headers, timeout=10, allow_redirects=True)
+                r = requests.get(c, headers=headers, timeout=30, allow_redirects=True)  # Increased from 10 to 30
                 if r.status_code == 200 and ("career" in r.text.lower() or "job" in r.text.lower()):
                     return r.url
             except Exception:

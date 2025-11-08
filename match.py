@@ -193,7 +193,7 @@ def fetch_serpapi_google_jobs(query: str, location: str | None, api_key: str, fe
     }
     if location:
         params["location"] = location
-    resp = requests.get("https://serpapi.com/search.json", params=params, timeout=30)
+    resp = requests.get("https://serpapi.com/search.json", params=params, timeout=60)  # Increased from 30 to 60
     resp.raise_for_status()
     data = resp.json()
     items = data.get("jobs_results", []) or []
@@ -228,6 +228,7 @@ def fetch_serpapi_google_jobs(query: str, location: str | None, api_key: str, fe
 
 
 def fetch_job_description_plain(url: str, max_chars: int = 12000) -> str:
+    """Fetch job description from URL, stripping HTML tags. Increased timeout."""
     try:
         headers = {
             "User-Agent": (
@@ -235,7 +236,7 @@ def fetch_job_description_plain(url: str, max_chars: int = 12000) -> str:
                 "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
             )
         }
-        resp = requests.get(url, timeout=20, headers=headers)
+        resp = requests.get(url, timeout=60, headers=headers)  # Increased from 20 to 60
         resp.raise_for_status()
         html_text = resp.text
     except Exception:
@@ -277,7 +278,7 @@ def fetch_remotive(query: str | None, fetch_limit: int) -> list[dict[str, Any]]:
     params: dict[str, Any] = {}
     if query:
         params["search"] = query
-    resp = requests.get("https://remotive.com/api/remote-jobs", params=params, timeout=30)
+    resp = requests.get("https://remotive.com/api/remote-jobs", params=params, timeout=60)  # Increased from 30 to 60
     resp.raise_for_status()
     data = resp.json()
     jobs = data.get("jobs", []) or []
@@ -304,7 +305,7 @@ def fetch_remotive(query: str | None, fetch_limit: int) -> list[dict[str, Any]]:
 def fetch_remoteok(query: str | None, fetch_limit: int) -> list[dict[str, Any]]:
     # Docs: https://remoteok.com/api
     headers = {"User-Agent": "Mozilla/5.0 (compatible; JobMatcher/1.0)"}
-    resp = requests.get("https://remoteok.com/api", headers=headers, timeout=30)
+    resp = requests.get("https://remoteok.com/api", headers=headers, timeout=60)  # Increased from 30 to 60
     resp.raise_for_status()
     data = resp.json()
     filtered: list[dict[str, Any]] = []
@@ -336,7 +337,7 @@ def fetch_remoteok(query: str | None, fetch_limit: int) -> list[dict[str, Any]]:
 
 def fetch_arbeitnow(query: str | None, fetch_limit: int) -> list[dict[str, Any]]:
     # Docs: https://www.arbeitnow.com/api/job-board-api
-    resp = requests.get("https://www.arbeitnow.com/api/job-board-api", timeout=30)
+    resp = requests.get("https://www.arbeitnow.com/api/job-board-api", timeout=60)  # Increased from 30 to 60
     resp.raise_for_status()
     data = resp.json()
     items = data.get("data", []) or []
@@ -401,18 +402,27 @@ def write_csv(rows: list[dict[str, Any]], csv_path: Path) -> None:
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
+        url_count = 0
+        missing_url_count = 0
         for r in rows:
+            url = r.get("url", "") or ""
+            if url:
+                url_count += 1
+            else:
+                missing_url_count += 1
+                print(f"  [csv-debug] Missing URL for: {r.get('company', 'N/A')} - {r.get('title', 'N/A')[:50]}")
             w.writerow({
                 "title": r.get("title", ""),
                 "company": r.get("company", ""),
                 "location": r.get("location", ""),
                 "country": r.get("country", ""),
                 "score": r.get("score", ""),
-                "url": r.get("url", ""),
+                "url": url,  # Ensure URL is written as-is
                 "careers_url": r.get("careers_url", ""),
                 "source": r.get("source", ""),
                 "description": (r.get("description", "") or "").replace("\r", " ").replace("\n", " ")
             })
+        print(f"  [csv-debug] Wrote {len(rows)} rows: {url_count} with URLs, {missing_url_count} without URLs")
 
 
 def main() -> None:
@@ -547,7 +557,17 @@ def main() -> None:
         except Exception:
             pass
         if raw_sites:
-            fetched += fetch_selenium_sites(raw_sites, int(resolved_cfg.get("fetch_limit", 200)))
+            selenium_jobs = fetch_selenium_sites(raw_sites, int(resolved_cfg.get("fetch_limit", 200)))
+            # Debug: Log URL availability from Selenium
+            selenium_with_urls = sum(1 for j in selenium_jobs if j.get("url"))
+            selenium_without_urls = len(selenium_jobs) - selenium_with_urls
+            print(f"[selenium-debug] Fetched {len(selenium_jobs)} jobs: {selenium_with_urls} with URLs, {selenium_without_urls} without URLs")
+            if selenium_without_urls > 0:
+                print(f"[selenium-debug] Jobs without URLs:")
+                for j in selenium_jobs[:10]:  # Show first 10
+                    if not j.get("url"):
+                        print(f"  - {j.get('company', 'N/A')}: {j.get('title', 'N/A')[:50]} (source: {j.get('source', 'N/A')})")
+            fetched += selenium_jobs
 
     # Country filter (lenient, allows 'Remote')
     if country:
@@ -556,12 +576,20 @@ def main() -> None:
     # Score and select
     scored = []
     for job in fetched:
+        # Debug: Log URL before scoring
+        if not job.get("url"):
+            print(f"[score-debug] Job without URL: {job.get('company', 'N/A')} - {job.get('title', 'N/A')[:50]} (source: {job.get('source', 'N/A')})")
         s = score_job(job, resume_text)
         # derive country value for CSV
         cval = "usa" if _matches_country(job.get("location"), "usa") else ""
         scored.append({**job, "score": round(s, 2), "country": cval})
     scored.sort(key=lambda x: x["score"], reverse=True)
     top = scored[: top_n]
+    
+    # Debug: Log URL availability in top N
+    top_with_urls = sum(1 for j in top if j.get("url"))
+    top_without_urls = len(top) - top_with_urls
+    print(f"[score-debug] Top {len(top)} jobs: {top_with_urls} with URLs, {top_without_urls} without URLs")
 
     out_file = Path(out_path)
     out_file.parent.mkdir(parents=True, exist_ok=True)
@@ -702,6 +730,12 @@ def main() -> None:
             
             print(f"[filter] Starting with {len(top[:100])} jobs")
             print(f"[filter] Filtering jobs with score >= {score_threshold}")
+            
+            # Debug: Log URL availability before filtering
+            jobs_with_urls = sum(1 for j in top[:100] if j.get("url"))
+            jobs_without_urls = len(top[:100]) - jobs_with_urls
+            print(f"[filter-debug] Before filtering: {jobs_with_urls} jobs with URLs, {jobs_without_urls} without URLs")
+            
             if target_locations:
                 print(f"[filter] Target locations: {', '.join(target_locations)}")
             if top_per_company:
@@ -711,11 +745,17 @@ def main() -> None:
             filtered_jobs = [j for j in top[:100] if j.get("score", 0) >= score_threshold]
             print(f"[filter] After score filter: {len(filtered_jobs)} jobs (removed {len(top[:100]) - len(filtered_jobs)})")
             
+            # Debug: Log URL availability after score filter
+            filtered_with_urls = sum(1 for j in filtered_jobs if j.get("url"))
+            filtered_without_urls = len(filtered_jobs) - filtered_with_urls
+            print(f"[filter-debug] After score filter: {filtered_with_urls} jobs with URLs, {filtered_without_urls} without URLs")
+            
             # Debug: Show sample of filtered jobs
             if filtered_jobs:
                 print(f"[filter] Sample jobs after score filter:")
                 for j in filtered_jobs[:3]:
-                    print(f"  - {j.get('company', 'N/A')}: {j.get('title', 'N/A')} (score: {j.get('score', 0)}, location: {j.get('location', 'N/A')})")
+                    url_status = "✅" if j.get("url") else "❌ NO URL"
+                    print(f"  - {j.get('company', 'N/A')}: {j.get('title', 'N/A')} (score: {j.get('score', 0)}, location: {j.get('location', 'N/A')}, URL: {url_status})")
 
             # Track best job per company from the entire candidate set (top 100) for fallback usage
             company_targets: list[str] = []
@@ -927,13 +967,16 @@ def main() -> None:
                 role_label = role or "Role"
                 jd_text = (job.get("description") or "").strip()
                 
+                # Debug: Log URL status
                 if not job_url:
-                    print(f"  [parallel-fetch] {company_label}: No URL, skipping fetch")
+                    print(f"  [parallel-fetch] {company_label}: ⚠️ NO URL in job data")
+                    print(f"  [parallel-fetch] {company_label}: Job keys: {list(job.keys())}")
+                    print(f"  [parallel-fetch] {company_label}: Job data: {str(job)[:200]}")
                     return job
                 
-                print(f"  [parallel-fetch] {company_label}: Starting fetch from {job_url[:60]}...")
+                print(f"  [parallel-fetch] {company_label}: Starting fetch from {job_url}")
                 
-                # ALWAYS try HTML parser first (best quality)
+                # ALWAYS try HTML parser first (best quality) - increased timeout
                 if LLM_JOB_HTML_PARSER_AVAILABLE and use_openai and openai_key:
                     try:
                         headers = {
@@ -942,7 +985,7 @@ def main() -> None:
                                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
                             )
                         }
-                        resp = requests.get(job_url, timeout=30, headers=headers)
+                        resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
                         resp.raise_for_status()
                         html_content = resp.text
                         job_html_parser = LLMJobHTMLParser(openai_key)
@@ -953,11 +996,15 @@ def main() -> None:
                             print(f"  [parallel-fetch] {company_label}: ✅ {len(extracted_desc)} chars (HTML parser)")
                             return job
                         else:
-                            print(f"  [parallel-fetch] {company_label}: HTML parser returned short/empty result")
+                            print(f"  [parallel-fetch] {company_label}: HTML parser returned short/empty result ({len(extracted_desc) if extracted_desc else 0} chars)")
+                    except requests.exceptions.Timeout:
+                        print(f"  [parallel-fetch] {company_label}: ⚠️ Timeout fetching {job_url[:60]}...")
+                    except requests.exceptions.RequestException as e:
+                        print(f"  [parallel-fetch] {company_label}: ⚠️ Request failed: {type(e).__name__}: {e}")
                     except Exception as e:
-                        print(f"  [parallel-fetch] {company_label}: HTML parser failed: {e}")
+                        print(f"  [parallel-fetch] {company_label}: HTML parser failed: {type(e).__name__}: {e}")
                 
-                # Fallback to plain text fetch (strip HTML tags)
+                # Fallback to plain text fetch (strip HTML tags) - increased timeout
                 try:
                     fallback_desc = fetch_job_description_plain(job_url)
                     if fallback_desc and len(fallback_desc) > 100:
@@ -965,9 +1012,11 @@ def main() -> None:
                         print(f"  [parallel-fetch] {company_label}: ✅ {len(fallback_desc)} chars (plain text)")
                         return job
                     else:
-                        print(f"  [parallel-fetch] {company_label}: Plain text fetch returned short/empty result")
+                        print(f"  [parallel-fetch] {company_label}: Plain text fetch returned short/empty result ({len(fallback_desc) if fallback_desc else 0} chars)")
+                except requests.exceptions.Timeout:
+                    print(f"  [parallel-fetch] {company_label}: ⚠️ Timeout in plain text fetch")
                 except Exception as e:
-                    print(f"  [parallel-fetch] {company_label}: Plain fetch failed: {e}")
+                    print(f"  [parallel-fetch] {company_label}: Plain fetch failed: {type(e).__name__}: {e}")
                 
                 # If still no description, create minimal one from title/company
                 if not job.get("description") or len(job.get("description", "")) < 50:
@@ -976,6 +1025,8 @@ def main() -> None:
                     job["description"] = minimal_desc
                     print(f"  [parallel-fetch] {company_label}: ⚠️ Using minimal description ({len(minimal_desc)} chars)")
                 
+                # Ensure URL is preserved
+                job["url"] = job_url
                 return job
             
             # Parallel fetch job descriptions
@@ -1042,7 +1093,7 @@ def main() -> None:
                                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
                             )
                         }
-                        resp = requests.get(job_url, timeout=30, headers=headers)
+                        resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
                         resp.raise_for_status()
                         html_content = resp.text
                         job_html_parser = LLMJobHTMLParser(openai_key)
@@ -1121,7 +1172,7 @@ def main() -> None:
                                 "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
                             )
                         }
-                        resp = requests.get(job_url, timeout=30, headers=headers)
+                        resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
                         resp.raise_for_status()
                         extracted = job_desc_extractor.extract_job_description(resp.text, company, role)
                         if extracted and extracted.get("description"):
