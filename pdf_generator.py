@@ -78,7 +78,7 @@ class PDFGenerator:
             fontSize=10,
             textColor=colors.HexColor('#2c3e50'),
             leftIndent=20,
-            spaceAfter=6,
+            spaceAfter=8,
             alignment=TA_JUSTIFY,
             bulletIndent=10
         ))
@@ -141,6 +141,8 @@ r45        Generate a professional 3-page resume PDF
             
             # Build content
             story = []
+            # We will try to ensure a minimum of 3 pages by inserting page breaks at logical boundaries
+            page_breaks_remaining = 2  # two breaks -> 3 pages total
             
             # Parse and format the resume content
             sections = self._parse_resume_content(content)
@@ -254,6 +256,16 @@ r45        Generate a professional 3-page resume PDF
                     
                     # Try to parse structured experiences
                     experiences = self._parse_experiences(exp_text)
+                    # Fallback: loose parse to ensure up to 5 distinct companies render
+                    if len(experiences) < 5:
+                        loose = self._parse_experiences_loose(exp_text)
+                        # merge unique by (position,company)
+                        seen = {(e.get('position',''), e.get('company','')) for e in experiences}
+                        for e in loose:
+                            key = (e.get('position',''), e.get('company',''))
+                            if key not in seen and (key[0] or key[1]):
+                                experiences.append(e)
+                                seen.add(key)
                     
                     # Debug: Print parsed experiences
                     print(f"  [pdf-debug] Parsed {len(experiences)} experiences")
@@ -310,6 +322,10 @@ r45        Generate a professional 3-page resume PDF
                         story.append(Spacer(1, 0.1*inch))
                         experience_added = True
                     break
+            # Insert a page break after Work Experience to help reach 3 pages
+            if experience_added and page_breaks_remaining > 0:
+                story.append(PageBreak())
+                page_breaks_remaining -= 1
             
             # Education
             for key in ['education', 'academic']:
@@ -335,6 +351,10 @@ r45        Generate a professional 3-page resume PDF
                     if skills_text:
                         story.append(Paragraph(skills_text, self.styles['Normal']))
                         story.append(Spacer(1, 0.15*inch))
+                    # Optional second page break after skills if still needed
+                    if page_breaks_remaining > 0:
+                        story.append(PageBreak())
+                        page_breaks_remaining -= 1
                     break
             
             # Functional Expertise
@@ -403,6 +423,10 @@ r45        Generate a professional 3-page resume PDF
                     break
             
             # Build PDF
+            # If we still haven't reached 3 pages, add remaining page breaks at the end
+            while page_breaks_remaining > 0:
+                story.append(PageBreak())
+                page_breaks_remaining -= 1
             doc.build(story)
             print(f"[pdf] ✅ Resume PDF generated: {output_path}")
             return True
@@ -718,6 +742,42 @@ r45        Generate a professional 3-page resume PDF
             experiences.append(current_exp)
         
         return experiences
+
+    def _parse_experiences_loose(self, text: str) -> list:
+        """Looser parser: capture any line with a ' | ' as position|company and attach following bullets/dates."""
+        results = []
+        current = None
+        for line in text.split('\n'):
+            s = line.strip()
+            if not s:
+                continue
+            if '|' in s:
+                # potential header
+                parts = [p.strip().replace('**','') for p in s.split('|')]
+                if len(parts) >= 2:
+                    # save previous
+                    if current and (current.get('position') or current.get('company')):
+                        results.append(current)
+                    current = {'position': ' | '.join(parts[:-1]), 'company': parts[-1], 'bullets': []}
+                    continue
+            # date/location
+            if current and (any(m in s for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Present']) or '–' in s or '-' in s):
+                if '|' in s:
+                    p = [p.strip() for p in s.split('|')]
+                    current['dates'] = p[0]
+                    if len(p) > 1:
+                        current['location'] = p[1]
+                else:
+                    current['dates'] = s
+                continue
+            # bullets
+            if current:
+                b = s.lstrip('•-*►▪→◆ ').strip()
+                if b:
+                    current.setdefault('bullets', []).append(b)
+        if current and (current.get('position') or current.get('company')):
+            results.append(current)
+        return results
 
 
 # Convenience functions

@@ -143,6 +143,15 @@ class WordDocumentGenerator:
                     
                     exp_text = sections_dict[key]
                     experiences = self._parse_experiences(exp_text)
+                    # Fallback: loose parsing to ensure up to 5 roles render
+                    if len(experiences) < 5:
+                        loose = self._parse_experiences_loose(exp_text)
+                        seen = {(e.get('position',''), e.get('company','')) for e in experiences}
+                        for e in loose:
+                            key = (e.get('position',''), e.get('company',''))
+                            if key not in seen and (key[0] or key[1]):
+                                experiences.append(e)
+                                seen.add(key)
                     
                     # Debug: Print parsed experiences
                     print(f"  [docx-debug] Parsed {len(experiences)} experiences")
@@ -482,6 +491,38 @@ class WordDocumentGenerator:
             experiences.append(current_exp)
         
         return experiences
+
+    def _parse_experiences_loose(self, text: str) -> list:
+        """Looser parser to capture position|company lines and attach following details."""
+        exps = []
+        cur = None
+        for line in text.split('\n'):
+            s = line.strip()
+            if not s:
+                continue
+            if '|' in s:
+                parts = [p.strip() for p in s.split('|')]
+                if len(parts) >= 2:
+                    if cur and (cur.get('position') or cur.get('company')):
+                        exps.append(cur)
+                    cur = {'position': ' | '.join(parts[:-1]), 'company': parts[-1], 'bullets': []}
+                    continue
+            if cur and (any(m in s for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Present']) or '–' in s or '-' in s):
+                if '|' in s:
+                    p = [p.strip() for p in s.split('|')]
+                    cur['dates'] = p[0]
+                    if len(p) > 1:
+                        cur['location'] = p[1]
+                else:
+                    cur['dates'] = s
+                continue
+            if cur:
+                b = s.lstrip('•-*►▪→◆ ')
+                if b:
+                    cur.setdefault('bullets', []).append(b)
+        if cur and (cur.get('position') or cur.get('company')):
+            exps.append(cur)
+        return exps
 
 
 # Convenience function

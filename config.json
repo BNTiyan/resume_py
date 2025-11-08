@@ -1,6 +1,6 @@
 {
   "resume": "input/resume.yml",
-  "top": 15,
+  "top": 100,
   "country": "usa",
   "fetch_limit": 100,
   "min_score": 40,
