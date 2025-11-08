@@ -829,16 +829,25 @@ def main() -> None:
             for bucket in best_jobs_by_company.values():
                 bucket.sort(key=lambda x: x.get("score", 0), reverse=True)
             
-            # Filter by target roles if provided
+            # Filter by target roles if provided (LENIENT matching with fuzzy matching)
             target_roles = [role.strip() for role in resolved_cfg.get("target_roles", []) if role and role.strip()]
             if target_roles:
-                print(f"[filter] Target roles: {', '.join(target_roles[:8])}" + (" ..." if len(target_roles) > 8 else ""))
+                print(f"[filter] Target roles (LENIENT mode): {', '.join(target_roles[:6])}" + (" ..." if len(target_roles) > 6 else ""))
 
                 def _normalize_role_text(text: str) -> str:
                     """Lowercase and strip punctuation for consistent comparisons."""
                     return re.sub(r"[^a-z0-9\\s]", " ", text.lower()).strip()
 
                 normalized_roles = [_normalize_role_text(role) for role in target_roles if _normalize_role_text(role)]
+                
+                # Generic keywords that indicate technical roles (for fallback matching)
+                generic_tech_keywords = [
+                    "engineer", "developer", "architect", "manager", "lead",
+                    "senior", "principal", "staff", "staff engineer", "staff developer",
+                    "security", "devops", "platform", "infrastructure", "backend",
+                    "frontend", "full stack", "data", "ml", "ai", "analytics"
+                ]
+                
                 role_filtered_jobs = []
                 removed_titles = []
 
@@ -852,21 +861,43 @@ def main() -> None:
 
                     title_words = set(title_norm.split())
                     matched = False
+                    match_type = ""
 
+                    # Method 1: Direct substring match (e.g., "software engineer" in "senior software engineer")
                     for role_norm in normalized_roles:
                         role_words = [w for w in role_norm.split() if w]
                         if not role_words:
                             continue
 
-                        # Direct substring match (e.g., "software engineer" in "senior software engineer")
                         if role_norm in title_norm:
                             matched = True
+                            match_type = "exact_substring"
                             break
 
                         # All role words present somewhere in title, order agnostic
                         if all(word in title_words for word in role_words):
                             matched = True
+                            match_type = "all_words_present"
                             break
+
+                    # Method 2: Fuzzy match - if title contains any target role words + "engineer/developer/etc"
+                    if not matched:
+                        # Check if title contains keywords from target roles (lenient)
+                        for role_norm in normalized_roles:
+                            # Get first meaningful word from role (e.g., "software" from "software engineer")
+                            role_parts = [w for w in role_norm.split() if len(w) > 2]
+                            if role_parts and role_parts[0] in title_words:
+                                # And has a tech keyword like "engineer"
+                                if any(keyword in title_norm for keyword in generic_tech_keywords):
+                                    matched = True
+                                    match_type = "fuzzy_keyword"
+                                    break
+
+                    # Method 3: Generic tech role match (fallback for any engineer/developer/etc role)
+                    if not matched:
+                        if any(keyword in title_norm for keyword in generic_tech_keywords):
+                            matched = True
+                            match_type = "generic_tech_role"
 
                     if matched:
                         role_filtered_jobs.append(job)
@@ -875,13 +906,13 @@ def main() -> None:
 
                 if role_filtered_jobs:
                     removed_count = len(filtered_jobs) - len(role_filtered_jobs)
-                    print(f"[filter] After role filter: {len(role_filtered_jobs)} jobs (removed {removed_count})")
+                    print(f"[filter] After role filter (LENIENT): {len(role_filtered_jobs)} jobs (removed {removed_count})")
                     if removed_titles:
                         sample_removed = ", ".join(removed_titles[:3])
-                        print(f"[filter] Skipped roles not matching preferences: {sample_removed}" + ("..." if len(removed_titles) > 3 else ""))
+                        print(f"[filter] Skipped non-technical roles: {sample_removed}" + ("..." if len(removed_titles) > 3 else ""))
                     filtered_jobs = role_filtered_jobs
                 else:
-                    print(f"[filter] WARNING: Role filter eliminated all jobs. Retaining previous list.")
+                    print(f"[filter] ⚠️  Role filter too strict - no jobs matched. Accepting all {len(filtered_jobs)} jobs.")
 
             # Filter by location if specified (AFTER fetching, not in URL)
             if target_locations and filtered_jobs:
