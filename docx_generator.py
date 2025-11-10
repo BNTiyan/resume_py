@@ -476,10 +476,12 @@ class WordDocumentGenerator:
             r'this resume (is|has been).*optimized',
             r'this resume (is|has been).*tailored',
             r'this resume (is|has been).*designed',
+            r'this resume (is|has been).*crafted',
             r'tailored.*for.*position',
             r'optimized for.*position at',
             r'formatted to align with',
             r'designed to showcase',
+            r'this resume is crafted to align',
         ]
         
         for line in lines:

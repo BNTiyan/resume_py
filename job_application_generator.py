@@ -4,7 +4,7 @@ Integrates job parser, resume generator, and cover letter generator.
 """
 import os
 import textwrap
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from concurrent.futures import ThreadPoolExecutor
 
 try:
@@ -17,6 +17,11 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
+try:
+    import google.generativeai as genai
+except Exception:
+    genai = None
+
 from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
 
 load_dotenv()
@@ -28,18 +33,33 @@ class JobApplicationGenerator:
     Simplifies the original multi-file structure for our use case.
     """
     
-    def __init__(self, openai_api_key: str = None):
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key required")
-        
-        model_name = os.getenv("OPENAI_RESUME_MODEL", "gpt-4o")
-        self.llm = ChatOpenAI(
-            model=model_name,
-            api_key=api_key,
-            temperature=0.4,
-        )
-        self.resume_text = None
+    def __init__(self, api_key: Optional[str] = None, provider: str = "openai"):
+        self.provider = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+        self.resume_text: Optional[str] = None
+
+        if self.provider == "openai":
+            openai_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not openai_key:
+                raise ValueError("OpenAI API key required for OpenAI provider")
+            model_name = os.getenv("OPENAI_RESUME_MODEL", "gpt-4o")
+            self.llm = ChatOpenAI(
+                model=model_name,
+                api_key=openai_key,
+                temperature=0.4,
+            )
+            self.gemini_model = None
+        elif self.provider == "gemini":
+            if genai is None:
+                raise ValueError("google-generativeai package is required for Gemini provider")
+            gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+            if not gemini_key:
+                raise ValueError("Gemini API key required for Gemini provider")
+            genai.configure(api_key=gemini_key)
+            model_name = os.getenv("GEMINI_RESUME_MODEL", "gemini-1.5-pro-latest")
+            self.gemini_model = genai.GenerativeModel(model_name)
+            self.llm = None
+        else:
+            raise ValueError(f"Unsupported LLM provider: {self.provider}")
 
     @staticmethod
     def _normalize_meta_field(value: str | None) -> str:
@@ -101,9 +121,32 @@ class JobApplicationGenerator:
         Provide a concise, structured summary.
         """)
         
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | self.llm | StrOutputParser()
-        return chain.invoke({"text": job_description})
+        return self._invoke_model(template, {"text": job_description})
+
+    def _invoke_model(self, template: str, variables: Dict[str, Any]) -> str:
+        normalized_vars = {k: (v if isinstance(v, str) else str(v)) for k, v in variables.items()}
+        if self.provider == "openai":
+            prompt = ChatPromptTemplate.from_template(template)
+            chain = prompt | self.llm | StrOutputParser()
+            return chain.invoke(normalized_vars)
+        else:
+            prompt_text = template.format(**normalized_vars)
+            response = self.gemini_model.generate_content(prompt_text)
+            if hasattr(response, "text") and response.text:
+                return response.text.strip()
+            if hasattr(response, "candidates"):
+                for cand in response.candidates:
+                    content = getattr(cand, "content", None)
+                    if content and getattr(content, "parts", None):
+                        pieces = []
+                        for part in content.parts:
+                            text = getattr(part, "text", "")
+                            if text:
+                                pieces.append(text)
+                        joined = "".join(pieces).strip()
+                        if joined:
+                            return joined
+            return ""
 
     def generate_tailored_resume(
         self,
@@ -127,10 +170,7 @@ class JobApplicationGenerator:
 
         template = self._preprocess_template(ENHANCED_RESUME_PROMPT)
 
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | self.llm | StrOutputParser()
-        
-        return chain.invoke({
+        return self._invoke_model(template, {
             "company_name": company,
             "job_title": role,
             "job_description": job_context,
@@ -159,10 +199,7 @@ class JobApplicationGenerator:
 
         template = self._preprocess_template(ENHANCED_COVER_LETTER_PROMPT)
 
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | self.llm | StrOutputParser()
-        
-        return chain.invoke({
+        return self._invoke_model(template, {
             "company_name": company,
             "job_title": role,
             "job_description": job_context,

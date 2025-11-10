@@ -132,6 +132,8 @@ class JobApplicationAgent:
             "applications_submitted": 0,
             "failures": 0
         }
+        self.llm_disabled_reason: Optional[str] = None
+        self.gemini_fallback_attempted = False
         self.base_resume_text: str = ""
         self.resume_structured: Optional[Dict[str, Any]] = None
         
@@ -170,9 +172,11 @@ class JobApplicationAgent:
 
             if self.config.openai_api_key:
                 self.job_desc_extractor = JobDescriptionExtractor(self.config.openai_api_key)
-                self.app_generator = JobApplicationGenerator(self.config.openai_api_key)
-                self.app_generator.set_resume(self.base_resume_text)
-                logger.info("LLM components initialized")
+                self.app_generator = self._build_application_generator("openai")
+                if self.app_generator:
+                    logger.info("LLM components initialized (OpenAI)")
+                else:
+                    logger.warning("Failed to initialize OpenAI application generator")
             else:
                 logger.warning("No OpenAI API key - LLM features disabled")
             
@@ -375,6 +379,14 @@ class JobApplicationAgent:
         if not self.app_generator:
             logger.warning("  No LLM available for generation")
             return False
+
+        if self.llm_disabled_reason:
+            logger.warning(
+                "  LLM generation skipped for %s (reason: %s)",
+                application.company,
+                self.llm_disabled_reason,
+            )
+            return False
         
         try:
             logger.info(f"  [LLM] Generating application materials for {application.company}...")
@@ -403,6 +415,21 @@ class JobApplicationAgent:
             
         except Exception as e:
             logger.error(f"  [LLM] Generation failed: {e}")
+            msg = str(e).lower()
+            if "insufficient_quota" in msg or "exceeded your current quota" in msg:
+                gemini_key = os.getenv("GEMINI_API_KEY")
+                if gemini_key and not self.gemini_fallback_attempted:
+                    logger.warning("  OpenAI quota exceeded. Attempting Gemini fallback...")
+                    self.gemini_fallback_attempted = True
+                    try:
+                        self.app_generator = self._build_application_generator("gemini")
+                        if self.app_generator:
+                            self.llm_disabled_reason = None
+                            return self.generate_application_materials(application)
+                    except Exception as gemini_exc:
+                        logger.error("  Gemini fallback initialization failed: %s", gemini_exc)
+                self.llm_disabled_reason = "insufficient_quota"
+                logger.error("  Disabling LLM generation for remainder of run due to insufficient quota.")
             application.error = str(e)
             application.status = "failed"
             self.stats["failures"] += 1
@@ -514,6 +541,22 @@ class JobApplicationAgent:
         except Exception as e:
             logger.error(f"Agent run failed: {e}")
             raise
+
+    def _build_application_generator(self, provider: str) -> Optional[JobApplicationGenerator]:
+        try:
+            api_key = None
+            if provider == "openai":
+                api_key = self.config.openai_api_key or os.getenv("OPENAI_API_KEY")
+            elif provider == "gemini":
+                api_key = os.getenv("GEMINI_API_KEY")
+            generator = JobApplicationGenerator(api_key=api_key, provider=provider)
+            generator.set_resume(self.base_resume_text)
+            if provider == "gemini":
+                logger.info("Gemini fallback initialized successfully")
+            return generator
+        except Exception as exc:
+            logger.error("  Failed to initialize %s application generator: %s", provider, exc)
+            return None
 
 
 def create_agent_from_config(config_path: str) -> JobApplicationAgent:
