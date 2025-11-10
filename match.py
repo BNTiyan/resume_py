@@ -705,7 +705,6 @@ def fetch_arbeitnow(query: str | None, fetch_limit: int) -> list[dict[str, Any]]
 
 FREE_SOURCES = {
     "remotive": fetch_remotive,
-    "remoteok": fetch_remoteok,
     "arbeitnow": fetch_arbeitnow,
 }
 
@@ -1098,17 +1097,30 @@ def main() -> None:
             use_openai = bool(openai_cfg.get("enabled"))
             openai_model = (openai_cfg.get("model") or "").strip()
             openai_key = (openai_cfg.get("api_key") or os.getenv("OPENAI_API_KEY") or "").strip()
+            gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+            llm_provider = (os.getenv("LLM_PROVIDER") or ("openai" if openai_key else "gemini")).lower()
             
             # Initialize JobApplicationGenerator (preferred method)
-            use_job_app_gen = bool(resolved_cfg.get("use_job_app_generator", True)) and JOB_APP_GENERATOR_AVAILABLE and use_openai and openai_key
+            can_use_openai = use_openai and openai_key
+            use_job_app_gen = bool(resolved_cfg.get("use_job_app_generator", True)) and JOB_APP_GENERATOR_AVAILABLE and (can_use_openai or gemini_key)
             job_app_gen = None
+            gemini_fallback_attempted = False
             if use_job_app_gen:
-                try:
-                    job_app_gen = JobApplicationGenerator(openai_key)
-                    job_app_gen.set_resume(resume_text)
-                    print("[jobgen] Using JobApplicationGenerator (unified LangChain pipeline)")
-                except Exception as e:
-                    print(f"[jobgen] Failed to initialize JobApplicationGenerator: {e}. Falling back.")
+                preferred_order = ["openai", "gemini"] if can_use_openai else ["gemini"]
+                for provider in preferred_order:
+                    try:
+                        api_key = openai_key if provider == "openai" else gemini_key
+                        if not api_key:
+                            continue
+                        job_app_gen = JobApplicationGenerator(api_key=api_key, provider=provider)
+                        job_app_gen.set_resume(resume_text)
+                        print(f"[jobgen] Using JobApplicationGenerator provider={provider}")
+                        llm_provider = provider
+                        break
+                    except Exception as e:
+                        print(f"[jobgen] Failed to initialize JobApplicationGenerator ({provider}): {e}")
+                        job_app_gen = None
+                if job_app_gen is None:
                     use_job_app_gen = False
             
             # Fallback: Initialize LLMCoverLetterJobDescription for cover letters  
@@ -1118,7 +1130,7 @@ def main() -> None:
             use_llm_cover = False
             llm_cover = None
 
-            if LLM_RESUMER_AVAILABLE and use_openai and openai_key:
+            if LLM_RESUMER_AVAILABLE and can_use_openai:
                 try:
                     llm_resumer = LLMResumer(openai_key)
                     llm_resumer.set_resume_data(resume_text)
@@ -1130,7 +1142,7 @@ def main() -> None:
                     llm_resumer_ready = False
                     print(f"[llm] Failed to initialize LLMResumer: {e}. Falling back.")
             
-            if not use_job_app_gen and not use_llm_resumer and LLM_COVER_LETTER_AVAILABLE and use_openai and openai_key:
+            if not use_job_app_gen and not use_llm_resumer and LLM_COVER_LETTER_AVAILABLE and can_use_openai:
                 try:
                     llm_cover = LLMCoverLetterJobDescription(openai_key)
                     llm_cover.set_resume(resume_text)
@@ -1142,7 +1154,7 @@ def main() -> None:
             # Initialize job description extractor (no embeddings needed)
             use_job_desc_extractor = False
             job_desc_extractor = None
-            if JOB_DESC_EXTRACTOR_AVAILABLE and use_openai and openai_key:
+            if JOB_DESC_EXTRACTOR_AVAILABLE and can_use_openai:
                 try:
                     job_desc_extractor = JobDescriptionExtractor(openai_key)
                     use_job_desc_extractor = True
@@ -1154,7 +1166,7 @@ def main() -> None:
             use_llm_parser = False
             llm_parser = None
             skip_embedding_parser = os.getenv("SKIP_EMBEDDING_PARSER", "false").lower() == "true"
-            if LLM_PARSER_AVAILABLE and use_openai and openai_key and not skip_embedding_parser:
+            if LLM_PARSER_AVAILABLE and can_use_openai and not skip_embedding_parser:
                 try:
                     llm_parser = LLMParser(openai_key)
                     use_llm_parser = True
@@ -1892,7 +1904,24 @@ def main() -> None:
                         print(f"     - company: {company}")
                         print(f"     - role: {role}")
                         print(f"  [jobgen] Generating application package for {company}...")
-                        result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                        try:
+                            result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                        except Exception as e:
+                            msg = str(e).lower()
+                            if ("insufficient_quota" in msg or "exceeded your current quota" in msg or "429" in msg) and gemini_key and not gemini_fallback_attempted:
+                                print("  [jobgen] OpenAI quota exceeded. Attempting Gemini fallback...")
+                                try:
+                                    fallback_gen = JobApplicationGenerator(api_key=gemini_key, provider="gemini")
+                                    fallback_gen.set_resume(resume_text)
+                                    job_app_gen = fallback_gen
+                                    llm_provider = "gemini"
+                                    gemini_fallback_attempted = True
+                                    result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                                except Exception as fallback_exc:
+                                    print(f"  [jobgen] Gemini fallback failed: {fallback_exc}")
+                                    raise
+                            else:
+                                raise
                         
                         # Save tailored resume (TXT)
                         if result.get("resume"):

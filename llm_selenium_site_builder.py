@@ -21,7 +21,7 @@ except Exception:
     openai_compat = None
 
 try:
-from openai import OpenAI
+    from openai import OpenAI
 except Exception as exc:  # pragma: no cover - only triggered if dependency missing
     raise RuntimeError(
         "The openai package is required for LLM Selenium site generation."
