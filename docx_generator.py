@@ -192,8 +192,8 @@ class WordDocumentGenerator:
                                 date_run.font.color.rgb = RGBColor(100, 100, 100)
                                 date_para.paragraph_format.space_after = Pt(6)
                             
-                            # Bullet points
-                            for bullet in exp.get('bullets', [])[:6]:
+                            # Bullet points - show all bullets (no limit)
+                            for bullet in exp.get('bullets', []):
                                 self._add_bullet_point(doc, bullet)
                         
                         experience_added = True

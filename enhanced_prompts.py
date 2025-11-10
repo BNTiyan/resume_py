@@ -73,9 +73,9 @@ Job Description: {job_description}
    - Dates MUST be in format "Month Year – Month Year" or "Month Year – Present"
    - Location MUST be included (e.g., "Remote, USA", "Michigan, USA", "Bangalore, India")
    
-   **CRITICAL - JOB-SPECIFIC TAILORING:** 
+   **CRITICAL - JOB-SPECIFIC TAILORING:
    - Include ALL 5 positions from the candidate's work history (prioritize most recent first)
-   - Each position must have 4-6 bullet points
+   - Each position must have 7-10 bullet points (minimum 7)
    - **FOR EACH BULLET POINT:**
      * Prioritize achievements that use KEYWORDS from the job description
      * If the job description mentions specific technologies (e.g., "Kubernetes", "TensorFlow", "React"), 
@@ -97,16 +97,16 @@ Job Description: {job_description}
 
 5. **TECHNICAL SKILLS Section:**
    Section header: "TECHNICAL SKILLS"
-   Organize in categories with clear labels (use ** for bold category names):
+   Organize in categories with clear labels (use for bold category names):
    ```
-   **Programming Languages:** Python, C++, JavaScript, Java, Shell Scripting
-   **Frameworks & Platforms:** Django, Flask, React JS, PyTorch, TensorFlow, Keras, OpenCV
-   **Cloud Technologies:** AWS (S3, Lambda, CloudFormation, DynamoDB, SageMaker), Azure
-   **Automation & DevOps Tools:** Docker, Jenkins, CI/CD Pipelines, Terraform, Ansible
-   **Data Management:** Snowflake, PostgreSQL, SQLite, SQL, DynamoDB
-   **Visualization Tools:** Plotly, Dash, Matplotlib
-   **Version Control:** Git, GitHub, Bitbucket
-   **Operating Systems:** Linux (Ubuntu, RedHat), macOS
+   **Programming Languages:Python, C++, JavaScript, Java, Shell Scripting
+   **Frameworks & Platforms:Django, Flask, React JS, PyTorch, TensorFlow, Keras, OpenCV
+   **Cloud Technologies:AWS (S3, Lambda, CloudFormation, DynamoDB, SageMaker), Azure
+   **Automation & DevOps Tools:Docker, Jenkins, CI/CD Pipelines, Terraform, Ansible
+   **Data Management:Snowflake, PostgreSQL, SQLite, SQL, DynamoDB
+   **Visualization Tools:Plotly, Dash, Matplotlib
+   **Version Control:Git, GitHub, Bitbucket
+   **Operating Systems:Linux (Ubuntu, RedHat), macOS
    ```
    **JOB-SPECIFIC PRIORITIZATION:**
    - **FIRST**: List ALL skills mentioned in the job description (even if candidate has limited experience)
@@ -122,11 +122,11 @@ Job Description: {job_description}
    Section header: "FUNCTIONAL EXPERTISE"
    Format like Technical Skills with categories:
    ```
-   **Machine Learning & AI:** ML pipeline development, clustering algorithms, trust modeling, Bayesian models
-   **Software Integration & Validation:** Middleware analysis, system debugging, testbench validation
-   **Pipeline Automation:** CI/CD pipeline creation, PR automation, dependency management
-   **Full Stack Development:** Flask, Django, Dash, React JS, SQL databases
-   **Computer Vision:** Camera object detection, 2D to 3D box mapping, emergency braking systems
+   **Machine Learning & AI:ML pipeline development, clustering algorithms, trust modeling, Bayesian models
+   **Software Integration & Validation:Middleware analysis, system debugging, testbench validation
+   **Pipeline Automation:CI/CD pipeline creation, PR automation, dependency management
+   **Full Stack Development:Flask, Django, Dash, React JS, SQL databases
+   **Computer Vision:Camera object detection, 2D to 3D box mapping, emergency braking systems
    ```
 
 7. **KEY ACHIEVEMENTS Section:**
@@ -206,21 +206,21 @@ Month Year – Month Year | GPA: X.X/4.0
 
 TECHNICAL SKILLS
 
-**Programming Languages:** Python, C++, JavaScript, Java
-**Frameworks & Platforms:** Django, Flask, React JS, PyTorch, TensorFlow
-**Cloud Technologies:** AWS (S3, Lambda, CloudFormation), Azure
-**Automation & DevOps Tools:** Docker, Jenkins, CI/CD, Terraform
-**Data Management:** PostgreSQL, SQLite, SQL, DynamoDB
-**Visualization Tools:** Plotly, Dash, Matplotlib
-**Version Control:** Git, GitHub, Bitbucket
+**Programming Languages:Python, C++, JavaScript, Java
+**Frameworks & Platforms:Django, Flask, React JS, PyTorch, TensorFlow
+**Cloud Technologies:AWS (S3, Lambda, CloudFormation), Azure
+**Automation & DevOps Tools:Docker, Jenkins, CI/CD, Terraform
+**Data Management:PostgreSQL, SQLite, SQL, DynamoDB
+**Visualization Tools:Plotly, Dash, Matplotlib
+**Version Control:Git, GitHub, Bitbucket
 
 FUNCTIONAL EXPERTISE
 
-**Machine Learning & AI:** ML pipeline development, clustering, trust modeling
-**Software Integration & Validation:** Middleware analysis, debugging, testbench validation
-**Pipeline Automation:** CI/CD pipeline creation, PR automation, dependency management
-**Full Stack Development:** Flask, Django, Dash, React JS, SQL databases
-**Computer Vision:** Camera object detection, 2D to 3D mapping, emergency braking systems
+**Machine Learning & AI:ML pipeline development, clustering, trust modeling
+**Software Integration & Validation:Middleware analysis, debugging, testbench validation
+**Pipeline Automation:CI/CD pipeline creation, PR automation, dependency management
+**Full Stack Development:Flask, Django, Dash, React JS, SQL databases
+**Computer Vision:Camera object detection, 2D to 3D mapping, emergency braking systems
 
 KEY ACHIEVEMENTS
 
@@ -349,7 +349,7 @@ Generate a tailored work experience section for a {job_title} role at {company_n
    - Employment Period | Location
      * Format: "Month Year – Month Year" or "Month Year – Present"
      * Include full location: "City, State/Country" or "Remote, Country"
-   - 4-6 impactful bullet points that:
+   - 7-10 impactful bullet points (MINIMUM 7) that:
      * Align with the job requirements
      * Include quantifiable results (%, $, numbers, scale)
      * Highlight relevant technologies and skills from job description
@@ -367,10 +367,13 @@ Generate a tailored work experience section for a {job_title} role at {company_n
 **MANDATORY FORMAT (use EXACTLY this format):**
 Position Title | Company Name
 Month Year – Month Year | Location
-• Achievement/responsibility with quantifiable impact
-• Achievement/responsibility with quantifiable impact
-• Achievement/responsibility with quantifiable impact
-• Achievement/responsibility with quantifiable impact
+• Highlight 1 with techincal details
+• Highlight 2 with techincal details
+• Highlight 3 with techincal details
+• Highlight 4 with techincal details
+• Achievement 1 with quantifiable results
+• Achievement 2 with quantifiable results
+• Achievement 3 with quantifiable results
 
 [Repeat for ALL positions - include ALL companies from candidate's background]
 

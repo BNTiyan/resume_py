@@ -147,8 +147,6 @@ r45        Generate a professional 3-page resume PDF
             
             # Build content
             story = []
-            # We will try to ensure a minimum of 3 pages by inserting page breaks at logical boundaries
-            page_breaks_remaining = 2  # two breaks -> 3 pages total
             
             # Parse and format the resume content
             sections = self._parse_resume_content(content)
@@ -328,10 +326,6 @@ r45        Generate a professional 3-page resume PDF
                         story.append(Spacer(1, 0.1*inch))
                         experience_added = True
                     break
-            # Insert a page break after Work Experience to help reach 3 pages
-            if experience_added and page_breaks_remaining > 0:
-                story.append(PageBreak())
-                page_breaks_remaining -= 1
             
             # Education
             for key in ['education', 'academic']:
@@ -344,7 +338,7 @@ r45        Generate a professional 3-page resume PDF
                             story.append(Paragraph(line, self.styles['BulletPoint']))
                         else:
                             story.append(Paragraph(line, self.styles['Normal']))
-                    story.append(Spacer(1, 0.15*inch))
+                    story.append(Spacer(1, 0.06*inch))
                     break
             
             # Skills
@@ -368,10 +362,6 @@ r45        Generate a professional 3-page resume PDF
                                 # Plain text - add bullet
                                 story.append(Paragraph(f"• {line}", self.styles['BulletPoint']))
                         story.append(Spacer(1, 0.06*inch))
-                    # Optional second page break after skills if still needed
-                    if page_breaks_remaining > 0:
-                        story.append(PageBreak())
-                        page_breaks_remaining -= 1
                     break
             
             # Functional Expertise
@@ -406,7 +396,7 @@ r45        Generate a professional 3-page resume PDF
                             story.append(Paragraph(line, self.styles['BulletPoint']))
                         else:
                             story.append(Paragraph(line, self.styles['Normal']))
-                    story.append(Spacer(1, 0.15*inch))
+                    story.append(Spacer(1, 0.06*inch))
                     break
             
             # Publications
@@ -420,7 +410,7 @@ r45        Generate a professional 3-page resume PDF
                             story.append(Paragraph(line, self.styles['BulletPoint']))
                         else:
                             story.append(Paragraph(line, self.styles['Normal']))
-                    story.append(Spacer(1, 0.15*inch))
+                    story.append(Spacer(1, 0.06*inch))
                     break
             
             # Projects (if space allows)
@@ -434,7 +424,7 @@ r45        Generate a professional 3-page resume PDF
                             story.append(Paragraph(line, self.styles['BulletPoint']))
                         else:
                             story.append(Paragraph(line, self.styles['Normal']))
-                    story.append(Spacer(1, 0.15*inch))
+                    story.append(Spacer(1, 0.06*inch))
                     break
             
             # Certifications
@@ -448,13 +438,11 @@ r45        Generate a professional 3-page resume PDF
                             story.append(Paragraph(line, self.styles['BulletPoint']))
                         else:
                             story.append(Paragraph(line, self.styles['Normal']))
+                    story.append(Spacer(1, 0.06*inch))
                     break
             
             # Build PDF
             # If we still haven't reached 3 pages, add remaining page breaks at the end
-            while page_breaks_remaining > 0:
-                story.append(PageBreak())
-                page_breaks_remaining -= 1
             doc.build(story)
             print(f"[pdf] ✅ Resume PDF generated: {output_path}")
             return True
