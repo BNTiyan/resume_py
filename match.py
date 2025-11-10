@@ -307,11 +307,17 @@ def fetch_job_description_with_playwright(url: str, max_chars: int = 12000) -> s
         return cleaned[:max_chars]
     
     except ImportError:
-        # Playwright not installed, return empty
+        # Playwright not installed - silently skip
         return ""
     except Exception as e:
-        # On any error, return empty
-        print(f"  [playwright] Error: {type(e).__name__}: {str(e)[:100]}")
+        # On any error, silently return empty (browsers may not be installed in CI/CD)
+        error_msg = str(e)
+        if "Executable doesn't exist" in error_msg or "ms-playwright" in error_msg:
+            # Browser not installed - this is expected in some environments, don't print error
+            pass
+        else:
+            # Other errors - print for debugging
+            print(f"  [playwright] Error: {type(e).__name__}: {str(e)[:100]}")
         return ""
 
 
