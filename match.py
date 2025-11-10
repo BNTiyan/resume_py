@@ -886,15 +886,13 @@ def main() -> None:
         return out
 
     # Free-source fetching removed; skip regardless of config.
-        elif serpapi_key and query:
-            fetched = fetch_serpapi_google_jobs(query, location, serpapi_key, int(resolved_cfg.get("fetch_limit", 200)))
-        else:
-            fetched = load_jobs(jobs_arg, jobs_url_arg, here)
-            if isinstance(fetched, dict) and 'items' in fetched:
-                fetched = fetched['items']  # normalize
-            if not isinstance(fetched, list):
-                fetched = []
-            fetched = fetched[: int(resolved_cfg.get("fetch_limit", 200))]
+
+    fetched = load_jobs(jobs_arg, jobs_url_arg, here)
+    if isinstance(fetched, dict) and 'items' in fetched:
+        fetched = fetched['items']  # normalize
+    if not isinstance(fetched, list):
+        fetched = []
+    fetched = fetched[: int(resolved_cfg.get("fetch_limit", 200))]
 
     # Optional Selenium fetch
     use_selenium = bool(selenium_opts.get("enabled"))
