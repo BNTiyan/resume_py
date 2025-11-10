@@ -12,6 +12,12 @@ from docx.enum.style import WD_STYLE_TYPE
 from datetime import datetime
 import re
 
+try:
+    from llm_experience_parser import parse_experiences_with_llm
+    LLM_PARSER_AVAILABLE = True
+except ImportError:
+    LLM_PARSER_AVAILABLE = False
+
 
 class WordDocumentGenerator:
     """Generate professional Word documents for resumes and cover letters"""
@@ -230,8 +236,18 @@ class WordDocumentGenerator:
                     
                     skills_text = sections_dict[key].replace('---', '').strip()
                     if skills_text:
-                        para = doc.add_paragraph(skills_text)
-                        para.paragraph_format.space_after = Pt(6)
+                        # Parse skills into bullet points
+                        skills_lines = [l.strip() for l in skills_text.split('\n') if l.strip()]
+                        for line in skills_lines:
+                            # Check if line already has bullet or is a category
+                            if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                                self._add_bullet_point(doc, line.lstrip('•-*►▪→◆ '))
+                            elif ':' in line and len(line) < 200:
+                                # Category line like "Programming Languages: Python, C++"
+                                self._add_bullet_point(doc, line)
+                            else:
+                                # Plain text - add bullet
+                                self._add_bullet_point(doc, line)
                     
                     doc.add_paragraph()  # Spacing
                     break
@@ -243,8 +259,18 @@ class WordDocumentGenerator:
                     
                     expertise_text = sections_dict[key].replace('---', '').strip()
                     if expertise_text:
-                        para = doc.add_paragraph(expertise_text)
-                        para.paragraph_format.space_after = Pt(6)
+                        # Parse expertise into bullet points
+                        expertise_lines = [l.strip() for l in expertise_text.split('\n') if l.strip()]
+                        for line in expertise_lines:
+                            # Check if line already has bullet or is a category
+                            if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                                self._add_bullet_point(doc, line.lstrip('•-*►▪→◆ '))
+                            elif ':' in line and len(line) < 200:
+                                # Category line like "Machine Learning & AI: ML pipeline development"
+                                self._add_bullet_point(doc, line)
+                            else:
+                                # Plain text - add bullet
+                                self._add_bullet_point(doc, line)
                     
                     doc.add_paragraph()  # Spacing
                     break
@@ -434,7 +460,25 @@ class WordDocumentGenerator:
         return sections
     
     def _parse_experiences(self, text: str) -> list:
-        """Parse work experience into structured format"""
+        """Parse work experience into structured format - uses LLM when available"""
+        # Try LLM parsing first if available
+        if LLM_PARSER_AVAILABLE:
+            try:
+                print("  [docx-debug] Attempting LLM-based experience parsing...")
+                llm_experiences = parse_experiences_with_llm(text)
+                if llm_experiences:
+                    print(f"  [docx-debug] LLM parsed {len(llm_experiences)} experiences successfully")
+                    # Debug output
+                    for idx, exp in enumerate(llm_experiences, 1):
+                        print(f"    [docx-debug] Exp {idx}: position={exp.get('position')!r}, company={exp.get('company')!r}, dates={exp.get('dates')!r}, location={exp.get('location')!r}")
+                    return llm_experiences
+                else:
+                    print("  [docx-debug] LLM parsing returned no results, falling back to regex parser")
+            except Exception as e:
+                print(f"  [docx-debug] LLM parsing failed: {e}, falling back to regex parser")
+        
+        # Fallback to original regex-based parsing
+        print("  [docx-debug] Using regex-based experience parsing...")
         experiences = []
         current_exp = None
         

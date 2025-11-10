@@ -17,8 +17,8 @@ Job Description: {job_description}
 **CRITICAL REQUIREMENTS:**
 
 **JOB DESCRIPTION ANALYSIS - READ THIS FIRST:**
-1. Identify the TOP 5-7 key requirements from the job description (technologies, skills, responsibilities)
-2. Identify the TOP 3-5 keywords/phrases that appear multiple times in the job description
+1. Identify the TOP 10 key requirements from the job description (technologies, skills, responsibilities)
+2. Identify the TOP 7 keywords/phrases that appear multiple times in the job description
 3. Identify the PRIMARY focus areas (e.g., "machine learning", "cloud infrastructure", "full-stack development", "data engineering")
 4. Match candidate's experience to these requirements and HIGHLIGHT matching achievements prominently
 
@@ -163,32 +163,39 @@ Full Name
 email@domain.com | Phone | github.com/username | linkedin.com/in/username
 
 PROFESSIONAL SUMMARY
-• [Bullet point 1 with numbers]
-• [Bullet point 2 with numbers]
-• [Bullet point 3 with numbers]
-• [Bullet point 4 with numbers]
-• [Bullet point 5 with numbers]
-• [Bullet point 6 with numbers]
-• [Bullet point 7 with numbers]
-• [Bullet point 8 with numbers]
-• [Bullet point 9 with numbers]
-• [Bullet point 10 with numbers]
+• [Bullet point 1 with  techincal details ]
+• [Bullet point 2 with  techincal details ]
+• [Bullet point 3 with  techincal details ]
+• [Bullet point 4 with  techincal details ]
+• [Bullet point 5 with  techincal details ]
+• [Bullet point 6 with  techincal details ]
+• [Bullet point 7 with  techincal details ]
+• [Bullet point 8 with  techincal details ]
+• [Bullet point 9 with  techincal details ]
+• [Bullet point 10 with  techincal details ]
 
 WORK EXPERIENCE
 
 Position Title | Company Name
 Month Year – Month Year | Location
+• Highlight 1 with techincal details
+• Highlight 2 with techincal details
+• Highlight 3 with techincal details
+• Highlight 4 with techincal details
 • Achievement 1 with quantifiable results
 • Achievement 2 with quantifiable results
 • Achievement 3 with quantifiable results
-• Achievement 4 with quantifiable results
+
 
 Position Title | Company Name
 Month Year – Month Year | Location
+• Highlight 1 with techincal details
+• Highlight 2 with techincal details
+• Highlight 3 with techincal details
+• Highlight 4 with techincal details
 • Achievement 1 with quantifiable results
 • Achievement 2 with quantifiable results
 • Achievement 3 with quantifiable results
-• Achievement 4 with quantifiable results
 
 [Repeat for ALL positions - include ALL 5 companies from candidate's background]
 
@@ -217,12 +224,13 @@ FUNCTIONAL EXPERTISE
 
 KEY ACHIEVEMENTS
 
-• Reduced manual validation and testing efforts by 70% through automation using Jenkins, Docker, and Azure
+• Reduced manual validation and testing efforts by 50% through automation using Jenkins, Docker, and Azure
 • Improved workflow efficiency by automating PR creation and dependency management with Azure Pipelines
 • Created AUTOSIM prototype supporting multiple integrations, reducing manual effort by 70%
 • Migrated object detection from 2D to 3D box mapping, improving system accuracy
 • Enhanced deployment reliability by automating installation processes across virtual and real nodes
 • Designed innovative tools that reduced release times and improved deployment workflows by 60%
+• Designed and implemented innovative deployment tools that leverage YAML configurations, significantly reducing software release times by automating installation.
 
 PUBLICATIONS
 

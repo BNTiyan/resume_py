@@ -47,7 +47,7 @@ class PDFGenerator:
             parent=self.styles['Heading1'],
             fontSize=16,
             textColor=colors.HexColor('#1a1a1a'),
-            spaceAfter=6,
+            spaceAfter=3,
             alignment=TA_CENTER,
             fontName='Helvetica-Bold'
         ))
@@ -56,14 +56,14 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(
             name='CustomSubHeader',
             parent=self.styles['Heading2'],
-            fontSize=12,
+            fontSize=11,
             textColor=colors.HexColor('#2c3e50'),
-            spaceAfter=8,
-            spaceBefore=12,
+            spaceAfter=4,
+            spaceBefore=6,
             fontName='Helvetica-Bold',
             borderWidth=1,
             borderColor=colors.HexColor('#3498db'),
-            borderPadding=4,
+            borderPadding=2,
             backColor=colors.HexColor('#ecf0f1')
         ))
         
@@ -71,20 +71,20 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(
             name='ContactInfo',
             parent=self.styles['Normal'],
-            fontSize=10,
+            fontSize=9,
             textColor=colors.HexColor('#34495e'),
             alignment=TA_CENTER,
-            spaceAfter=12
+            spaceAfter=6
         ))
         
         # Bullet point style
         self.styles.add(ParagraphStyle(
             name='BulletPoint',
             parent=self.styles['Normal'],
-            fontSize=10,
+            fontSize=9,
             textColor=colors.HexColor('#2c3e50'),
             leftIndent=20,
-            spaceAfter=8,
+            spaceAfter=3,
             alignment=TA_JUSTIFY,
             bulletIndent=10
         ))
@@ -93,10 +93,10 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(
             name='CompanyPosition',
             parent=self.styles['Normal'],
-            fontSize=11,
+            fontSize=10,
             textColor=colors.HexColor('#2c3e50'),
-            spaceAfter=4,
-            spaceBefore=8,
+            spaceAfter=2,
+            spaceBefore=4,
             fontName='Helvetica-Bold'
         ))
         
@@ -104,9 +104,9 @@ class PDFGenerator:
         self.styles.add(ParagraphStyle(
             name='DateLocation',
             parent=self.styles['Normal'],
-            fontSize=9,
+            fontSize=8,
             textColor=colors.HexColor('#7f8c8d'),
-            spaceAfter=6,
+            spaceAfter=3,
             fontName='Helvetica-Oblique'
         ))
     
@@ -212,7 +212,7 @@ r45        Generate a professional 3-page resume PDF
                     f"<b>Target Position:</b> {job_title_normalized} at {company_name_normalized}",
                     self.styles['Normal']
                 ))
-                story.append(Spacer(1, 0.2*inch))
+                story.append(Spacer(1, 0.08*inch))
             
             # Professional Summary (10 bullet points)
             summary_added = False
@@ -243,7 +243,7 @@ r45        Generate a professional 3-page resume PDF
                                 break
                     
                     if bullet_count > 0:
-                        story.append(Spacer(1, 0.15*inch))
+                        story.append(Spacer(1, 0.06*inch))
                         summary_added = True
                     break
             
@@ -315,7 +315,7 @@ r45        Generate a professional 3-page resume PDF
                                     bullet_escaped = bullet_text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
                                     story.append(Paragraph(f"• {bullet_escaped}", self.styles['BulletPoint']))
                             
-                            story.append(Spacer(1, 0.1*inch))
+                            story.append(Spacer(1, 0.04*inch))
                         experience_added = True
                     else:
                         # Fallback: just render the text with basic formatting
@@ -355,8 +355,19 @@ r45        Generate a professional 3-page resume PDF
                     # Remove --- separators
                     skills_text = skills_text.replace('---', '').strip()
                     if skills_text:
-                        story.append(Paragraph(skills_text, self.styles['Normal']))
-                        story.append(Spacer(1, 0.15*inch))
+                        # Parse skills into bullet points
+                        skills_lines = [l.strip() for l in skills_text.split('\n') if l.strip()]
+                        for line in skills_lines:
+                            # Check if line already has bullet or is a category
+                            if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                                story.append(Paragraph(line, self.styles['BulletPoint']))
+                            elif ':' in line and len(line) < 200:
+                                # Category line like "Programming Languages: Python, C++"
+                                story.append(Paragraph(f"• {line}", self.styles['BulletPoint']))
+                            else:
+                                # Plain text - add bullet
+                                story.append(Paragraph(f"• {line}", self.styles['BulletPoint']))
+                        story.append(Spacer(1, 0.06*inch))
                     # Optional second page break after skills if still needed
                     if page_breaks_remaining > 0:
                         story.append(PageBreak())
@@ -369,8 +380,19 @@ r45        Generate a professional 3-page resume PDF
                     story.append(Paragraph("FUNCTIONAL EXPERTISE", self.styles['CustomSubHeader']))
                     expertise_text = sections[key].replace('---', '').strip()
                     if expertise_text:
-                        story.append(Paragraph(expertise_text, self.styles['Normal']))
-                        story.append(Spacer(1, 0.15*inch))
+                        # Parse expertise into bullet points
+                        expertise_lines = [l.strip() for l in expertise_text.split('\n') if l.strip()]
+                        for line in expertise_lines:
+                            # Check if line already has bullet or is a category
+                            if line.startswith('•') or line.startswith('-') or line.startswith('*'):
+                                story.append(Paragraph(line, self.styles['BulletPoint']))
+                            elif ':' in line and len(line) < 200:
+                                # Category line like "Machine Learning & AI: ML pipeline development"
+                                story.append(Paragraph(f"• {line}", self.styles['BulletPoint']))
+                            else:
+                                # Plain text - add bullet
+                                story.append(Paragraph(f"• {line}", self.styles['BulletPoint']))
+                        story.append(Spacer(1, 0.06*inch))
                     break
             
             # Key Achievements
@@ -505,7 +527,7 @@ r45        Generate a professional 3-page resume PDF
             company_name_normalized = _normalize_meta_field(company_name)
             if company_name_normalized:
                 story.append(Paragraph(f"Hiring Manager<br/>{company_name_normalized}", self.styles['Normal']))
-                story.append(Spacer(1, 0.2*inch))
+                story.append(Spacer(1, 0.08*inch))
             
             # Subject line (only if both are provided and not "Not specified")
             job_title_normalized = _normalize_meta_field(job_title)
@@ -514,7 +536,7 @@ r45        Generate a professional 3-page resume PDF
                     f"<b>Re: Application for {job_title_normalized} Position</b>",
                     self.styles['Normal']
                 ))
-                story.append(Spacer(1, 0.2*inch))
+                story.append(Spacer(1, 0.08*inch))
             
             # Cover letter body
             # Parse paragraphs and format, removing "Not specified" text
@@ -539,7 +561,7 @@ r45        Generate a professional 3-page resume PDF
             # Closing
             story.append(Spacer(1, 0.2*inch))
             story.append(Paragraph("Sincerely,", self.styles['Normal']))
-            story.append(Spacer(1, 0.3*inch))
+            story.append(Spacer(1, 0.1*inch))
             if candidate_name:
                 story.append(Paragraph(candidate_name, self.styles['Normal']))
             
