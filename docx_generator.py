@@ -23,6 +23,17 @@ def _clean_markdown(text: str) -> str:
     """Remove markdown formatting (bold, italic, etc.) from text."""
     if not text:
         return text
+    # Convert markdown links [label](url) into "label: url"
+    def _link_repl(match: re.Match[str]) -> str:
+        label = match.group(1).strip()
+        url = match.group(2).strip()
+        if not label:
+            return url
+        if label.lower() in {"github", "linkedin", "portfolio", "website"}:
+            return f"{label}: {url}"
+        return f"{label} ({url})"
+
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _link_repl, text)
     # Remove bold (**text** or __text__)
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
     text = re.sub(r'__(.*?)__', r'\1', text)
@@ -30,6 +41,34 @@ def _clean_markdown(text: str) -> str:
     text = re.sub(r'(?<!\*)\*(?!\*)([^\*]+)\*(?!\*)', r'\1', text)
     text = re.sub(r'(?<!_)_(?!_)([^_]+)_(?!_)', r'\1', text)
     return text
+
+
+def _extract_contact_details(content: str, sections: dict) -> dict[str, str]:
+    details: dict[str, str] = {}
+    candidates = content.splitlines()[:30]
+    contact_section = sections.get("contact")
+    if contact_section:
+        candidates.extend(contact_section.splitlines())
+
+    email_regex = re.compile(r'[\w\.-]+@[\w\.-]+\.\w+')
+    phone_regex = re.compile(r'(\+?\d[\d\s\-\(\)]{7,}\d)')
+
+    for line in candidates:
+        if not line:
+            continue
+        stripped = _clean_markdown(line.strip())
+        lower = stripped.lower()
+        if "linkedin.com" in lower and "linkedin" not in details:
+            details["linkedin"] = stripped
+        if "github.com" in lower and "github" not in details:
+            details["github"] = stripped
+        match_email = email_regex.search(stripped)
+        if match_email and "email" not in details:
+            details["email"] = match_email.group(0)
+        match_phone = phone_regex.search(stripped)
+        if match_phone and "phone" not in details:
+            details["phone"] = re.sub(r'\s+', ' ', match_phone.group(0)).strip()
+    return details
 
 
 class WordDocumentGenerator:
@@ -95,17 +134,36 @@ class WordDocumentGenerator:
                 name_run.font.bold = True
                 name_run.font.color.rgb = RGBColor(0, 0, 0)
             
-            # Contact Info
-            if 'contact' in sections_dict:
-                contact_text = sections_dict['contact'].replace('\n', ' | ')
-                contact_para = doc.add_paragraph(contact_text)
+            contact_details = _extract_contact_details(content, sections_dict)
+            mail_phone_parts = []
+            if contact_details.get("email"):
+                mail_phone_parts.append(contact_details["email"])
+            if contact_details.get("phone"):
+                mail_phone_parts.append(contact_details["phone"])
+
+            if mail_phone_parts:
+                contact_para = doc.add_paragraph(" | ".join(mail_phone_parts))
                 contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 contact_run = contact_para.runs[0]
                 contact_run.font.size = Pt(10)
                 contact_run.font.color.rgb = RGBColor(80, 80, 80)
-            
-            # Add spacing
-            doc.add_paragraph()
+
+            if contact_details.get("linkedin"):
+                linkedin_para = doc.add_paragraph(f"LinkedIn URL: {contact_details['linkedin']}")
+                linkedin_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                linkedin_para.paragraph_format.space_after = Pt(2)
+
+            if contact_details.get("github"):
+                github_para = doc.add_paragraph(f"Git Link: {contact_details['github']}")
+                github_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                github_para.paragraph_format.space_after = Pt(6)
+
+            if mail_phone_parts or contact_details.get("linkedin") or contact_details.get("github"):
+                doc.add_paragraph()
+                for _ in range(4):
+                    line_para = doc.add_paragraph("______________________________________________")
+                    line_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                doc.add_paragraph()
             
             # Professional Summary (15 bullet points)
             summary_added = False

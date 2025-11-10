@@ -10,7 +10,22 @@
   "run_both": true,
   "selenium_only": true,
   "save_fetched": true,
-  "companies": [],
+  "companies": [
+    "meta",
+    "uber",
+    "google",
+    "apple",
+    "amazon",
+    "netflix",
+    "adp",
+    "ford",
+    "bosch",
+    "jpmorgan",
+    "morgan stanley",
+    "bank of america",
+    "gm",
+    "oracle"
+  ],
   "target_roles": [
     "software engineer",
     "senior software engineer",
@@ -32,11 +47,9 @@
   "selenium_options": {
     "enabled": true,
     "sites": [
-
-
       {
-        "url": "https://www.metacareers.com/jobs",
         "company": "meta",
+        "url": "https://www.metacareers.com/jobs",
         "list_selector": "a[href*='/jobs/'], div[class*='job'], li[class*='job']",
         "title_selector": "div[class*='title'], span[class*='title'], h2, h3, a[href*='/jobs/'], [aria-label]",
         "location_selector": "span[class*='location'], div[class*='location']",
@@ -48,10 +61,177 @@
         "sleep_seconds": 3,
         "wait_selector": "a[href*='/jobs/']"
       },
-     
       {
-        "url": "https://careers.oracle.com/jobs/#en/sites/jobsearch",
+        "company": "uber",
+        "url": "https://www.uber.com/us/en/careers/list/?department=Engineering",
+        "list_selector": "div[data-testid='job-card'], li[class*='job'], a[href*='/jobs/']",
+        "title_selector": "h3, h4, [class*='title'], a[href*='/jobs/']",
+        "location_selector": ".location, [class*='location'], [data-testid='location']",
+        "link_selector": "a[href*='/jobs/']",
+        "source": "selenium:uber",
+        "careers_url": "https://www.uber.com/us/en/careers/",
+        "domain_filter": "uber.com",
+        "absolute_base": "https://www.uber.com",
+        "sleep_seconds": 3,
+        "wait_selector": "div[data-testid='job-card'], li[class*='job'], a[href*='/jobs/']"
+      },
+      {
+        "company": "google",
+        "url": "https://www.google.com/about/careers/applications/jobs/results/",
+        "list_selector": "li[class*='lLd3Je'], div[class*='job-card']",
+        "title_selector": "h2, h3, a[href*='/jobs/results/']",
+        "location_selector": "span[class*='r0wTof'], span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/jobs/results/']",
+        "source": "selenium:google",
+        "careers_url": "https://www.google.com/about/careers/",
+        "domain_filter": "google.com",
+        "absolute_base": "https://www.google.com",
+        "sleep_seconds": 3,
+        "wait_selector": "li[class*='lLd3Je'], div[class*='job-card']"
+      },
+      {
+        "company": "apple",
+        "url": "https://jobs.apple.com/en-us/search?location=united-states-USA&team=software-and-services-SFTWR+machine-learning-and-ai-MLAI",
+        "list_selector": "tr[id*='job-'], li[class*='job']",
+        "title_selector": "a[id*='job-title'], h3, h4",
+        "location_selector": ".table--advanced-search__location, span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/details/']",
+        "source": "selenium:apple",
+        "careers_url": "https://jobs.apple.com/",
+        "domain_filter": "apple.com",
+        "absolute_base": "https://jobs.apple.com",
+        "sleep_seconds": 3,
+        "wait_selector": "tr[id*='job-'], li[class*='job']"
+      },
+      {
+        "company": "amazon",
+        "url": "https://www.amazon.jobs/en/search",
+        "list_selector": "div[class*='job-tile'], li[class*='job-tile']",
+        "title_selector": "h3, a[class*='title']",
+        "location_selector": "span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/jobs/']",
+        "source": "selenium:amazon",
+        "careers_url": "https://www.amazon.jobs/",
+        "domain_filter": "amazon.jobs",
+        "absolute_base": "https://www.amazon.jobs",
+        "sleep_seconds": 3,
+        "wait_selector": "div[class*='job-tile'], li[class*='job-tile']"
+      },
+      {
+        "company": "netflix",
+        "url": "https://jobs.netflix.com/search",
+        "list_selector": "div[class*='job-card'], li[class*='job-card']",
+        "title_selector": "h3, a[class*='job-title'], a[class*='title']",
+        "location_selector": "span[class*='job-location'], span[class*='location']",
+        "link_selector": "a[href*='/jobs/']",
+        "source": "selenium:netflix",
+        "careers_url": "https://jobs.netflix.com/",
+        "domain_filter": "netflix.com",
+        "absolute_base": "https://jobs.netflix.com",
+        "sleep_seconds": 3,
+        "wait_selector": "div[class*='job-card'], li[class*='job-card']"
+      },
+      {
+        "company": "adp",
+        "url": "https://jobs.adp.com/search-jobs",
+        "list_selector": "article.job-result, div[class*='job-result'], li[class*='job-result']",
+        "title_selector": "a.job-title, h2, h3, a[href*='/job/']",
+        "location_selector": "span.job-location, div[class*='location'], p[class*='location']",
+        "link_selector": "a.job-title, a[href*='/job/']",
+        "source": "selenium:adp",
+        "careers_url": "https://jobs.adp.com/",
+        "domain_filter": "adp.com",
+        "absolute_base": "https://jobs.adp.com",
+        "sleep_seconds": 3,
+        "wait_selector": "article.job-result, div[class*='job-result'], li[class*='job-result']"
+      },
+      {
+        "company": "ford",
+        "url": "https://jobs.ford.com/en/search-results",
+        "list_selector": "article[class*='job'], li[data-ph-id*='job'], div[class*='job-listing']",
+        "title_selector": "a[data-ph-id*='job-title'], h2, h3",
+        "location_selector": "span[data-ph-id*='job-location'], span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:ford",
+        "careers_url": "https://jobs.ford.com/",
+        "domain_filter": "ford.com",
+        "absolute_base": "https://jobs.ford.com",
+        "sleep_seconds": 3,
+        "wait_selector": "article[class*='job'], li[data-ph-id*='job'], div[class*='job-listing']"
+      },
+      {
+        "company": "bosch",
+        "url": "https://www.bosch-career.com/en/jobsearch",
+        "list_selector": "div[class*='job-card'], li[class*='job'], article[class*='job']",
+        "title_selector": "a[class*='job-title'], h3, h4",
+        "location_selector": "span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='job-'], a[href*='/job/']",
+        "source": "selenium:bosch",
+        "careers_url": "https://www.bosch-career.com/",
+        "domain_filter": "bosch.com",
+        "absolute_base": "https://www.bosch-career.com",
+        "sleep_seconds": 3,
+        "wait_selector": "div[class*='job-card'], li[class*='job'], article[class*='job']"
+      },
+      {
+        "company": "jpmorgan",
+        "url": "https://careers.jpmorgan.com/us/en/search-results",
+        "list_selector": "li[class*='job-result'], article[class*='job'], div[class*='job-result']",
+        "title_selector": "a[class*='job-title'], h2, h3",
+        "location_selector": "span[class*='job-location'], span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:jpmorgan",
+        "careers_url": "https://careers.jpmorgan.com/",
+        "domain_filter": "jpmorgan.com",
+        "absolute_base": "https://careers.jpmorgan.com",
+        "sleep_seconds": 3,
+        "wait_selector": "li[class*='job-result'], article[class*='job'], div[class*='job-result']"
+      },
+      {
+        "company": "morganstanley",
+        "url": "https://careers.morganstanley.com/us/en/search-results",
+        "list_selector": "li[class*='job'], article[class*='job'], div[class*='job-result']",
+        "title_selector": "a[class*='job-title'], h2, h3",
+        "location_selector": "span[class*='job-location'], span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:morganstanley",
+        "careers_url": "https://careers.morganstanley.com/",
+        "domain_filter": "morganstanley.com",
+        "absolute_base": "https://careers.morganstanley.com",
+        "sleep_seconds": 3,
+        "wait_selector": "li[class*='job'], article[class*='job'], div[class*='job-result']"
+      },
+      {
+        "company": "bofa",
+        "url": "https://careers.bankofamerica.com/en-us/job-search/united-states",
+        "list_selector": "article[class*='job'], li[class*='job'], div[class*='job-card']",
+        "title_selector": "a[class*='job-title'], h2, h3",
+        "location_selector": "span[class*='job-location'], span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:bofa",
+        "careers_url": "https://careers.bankofamerica.com/",
+        "domain_filter": "bankofamerica.com",
+        "absolute_base": "https://careers.bankofamerica.com",
+        "sleep_seconds": 3,
+        "wait_selector": "article[class*='job'], li[class*='job'], div[class*='job-card']"
+      },
+      {
+        "company": "gm",
+        "url": "https://search-careers.gm.com/en/jobs/",
+        "list_selector": "div[class*='job-listing'], li[class*='job'], article[class*='job']",
+        "title_selector": "a[class*='job-title'], h2, h3",
+        "location_selector": "span[class*='location'], div[class*='location'], p[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:gm",
+        "careers_url": "https://search-careers.gm.com/",
+        "domain_filter": "gm.com",
+        "absolute_base": "https://search-careers.gm.com",
+        "sleep_seconds": 3,
+        "wait_selector": "div[class*='job-listing'], li[class*='job'], article[class*='job']"
+      },
+      {
         "company": "oracle",
+        "url": "https://careers.oracle.com/jobs/#en/sites/jobsearch",
         "list_selector": "a[data-ui='requisition-item'], li[data-ui='requisition-item'], div[class*='job'] a[href*='/job/'], tr[data-ui='requisition-item']",
         "title_selector": "[data-ui='job-title'], span[class*='job-title'], h3, h4, a[href*='/job/'], td[data-ui='job-title']",
         "location_selector": "[data-ui='job-location'], span[class*='job-location'], [class*='location'], td[data-ui='job-location']",
@@ -60,12 +240,20 @@
         "careers_url": "https://careers.oracle.com/",
         "domain_filter": "oracle.com",
         "absolute_base": "https://careers.oracle.com",
-        "open_roles_text": ["search jobs", "view all jobs"],
-        "search_patterns": ["open roles", "search jobs", "view jobs"],
+        "open_roles_text": [
+          "search jobs",
+          "view all jobs"
+        ],
+        "search_patterns": [
+          "open roles",
+          "search jobs",
+          "view jobs"
+        ],
         "wait_selector": "a[data-ui='requisition-item'], li[data-ui='requisition-item'], tr[data-ui='requisition-item']",
         "sleep_seconds": 3
       }
-    ]
+    ],
+    "extra_sites": []
   },
   "output": {
     "dir": "output",
@@ -113,5 +301,15 @@
   "resume_builder": {
     "personal_information": "Bhavana Nare | 7067159912 | n.bhavana.reddy5@gmail.com | linkedin.com/in/bhavana-nare-60657385 | github.com/Bhavana5N",
     "out": "output/resume_enhanced.docx"
+  },
+  "company_sources": {
+    "lever": {
+      "enabled": true,
+      "companies": []
+    },
+    "greenhouse": {
+      "enabled": true,
+      "companies": []
+    }
   }
 }

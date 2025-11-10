@@ -7,7 +7,7 @@ import csv
 from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from pathlib import Path
-from typing import Any
+from typing import Any, List, Tuple
 from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from dotenv import load_dotenv
@@ -79,16 +79,21 @@ except Exception:
     LLMJobHTMLParser = None
 
 try:
+    from llm_selenium_site_builder import generate_selenium_site_entries  # type: ignore
+    LLM_SELENIUM_SITE_BUILDER_AVAILABLE = True
+except Exception:
+    LLM_SELENIUM_SITE_BUILDER_AVAILABLE = False
+    generate_selenium_site_entries = None  # type: ignore
+
+try:
     from selenium_scraper import (
         fetch_selenium_sites,
-        build_selenium_sites_from_company_opts,
         SELENIUM_AVAILABLE,
         create_chrome_driver,
     )
 except Exception:
     SELENIUM_AVAILABLE = False
     fetch_selenium_sites = None
-    build_selenium_sites_from_company_opts = None
     create_chrome_driver = None
 
 try:
@@ -198,6 +203,266 @@ def load_jobs(local: str | None, url: str | None, here: Path) -> list[dict[str, 
         return resp.json()
     # No fallback to sample file; return empty list so other sources (e.g., Selenium) can run
     return []
+
+
+def load_selenium_sites_from_opts(opts: dict[str, Any]) -> list[dict[str, Any]]:
+    """Normalize Selenium site definitions from config."""
+    sites: list[dict[str, Any]] = []
+    if not opts:
+        return sites
+
+    seen_keys: set[str] = set()
+
+    def _add_sites(items: Any) -> None:
+        if not items:
+            return
+        if isinstance(items, dict):
+            _add_sites(items.get("sites"))
+            return
+        if not isinstance(items, list):
+            return
+        for entry in items:
+            if not isinstance(entry, dict):
+                continue
+            company = (entry.get("company") or "").strip().lower()
+            url = (entry.get("url") or "").strip().lower()
+            key = company or url
+            if key and key in seen_keys:
+                continue
+            if key:
+                seen_keys.add(key)
+            sites.append(entry)
+
+    _add_sites(opts.get("sites"))
+    _add_sites(opts.get("extra_sites"))
+
+    opts["sites"] = sites
+    return sites
+
+
+def _slugify_company_name(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
+
+
+def _normalize_company_entries(entries: Any) -> List[Tuple[str, str]]:
+    normalized: List[Tuple[str, str]] = []
+    if not entries:
+        return normalized
+    if not isinstance(entries, list):
+        entries = [entries]
+    for entry in entries:
+        if isinstance(entry, dict):
+            raw_name = str(entry.get("name") or entry.get("company") or entry.get("slug") or "").strip()
+            slug = str(entry.get("slug") or "").strip()
+            if not slug and raw_name:
+                slug = _slugify_company_name(raw_name)
+        else:
+            raw_name = str(entry or "").strip()
+            slug = _slugify_company_name(raw_name)
+        if not slug:
+            continue
+        normalized.append((raw_name or slug, slug))
+    return normalized
+
+
+def generate_company_source_sites(company_sources_cfg: dict[str, Any]) -> Tuple[List[dict[str, Any]], List[str]]:
+    """
+    Generate Selenium site entries for known hosted job boards (Lever, Greenhouse).
+    """
+    generated_sites: List[dict[str, Any]] = []
+    generated_companies: List[str] = []
+    seen_slugs: set[str] = set()
+
+    if not company_sources_cfg:
+        return generated_sites, generated_companies
+
+    lever_cfg = company_sources_cfg.get("lever") or {}
+    if lever_cfg.get("enabled"):
+        defaults = {
+            "list_selector": lever_cfg.get("list_selector") or "div.posting, div[data-qa='posting'], ul.postings-list li",
+            "title_selector": lever_cfg.get("title_selector") or "a[data-qa='posting-name'], a.posting-title, h5.posting-title",
+            "location_selector": lever_cfg.get("location_selector") or "span.posting-location, div.posting-location",
+            "link_selector": lever_cfg.get("link_selector") or "a[data-qa='posting-name'], a.posting-title",
+            "wait_selector": lever_cfg.get("wait_selector") or "a[data-qa='posting-name'], a.posting-title",
+        }
+        for _, slug in _normalize_company_entries(lever_cfg.get("companies")):
+            if not slug or slug in seen_slugs:
+                continue
+            seen_slugs.add(slug)
+            site = {
+                "company": slug,
+                "url": f"https://jobs.lever.co/{slug}",
+                "careers_url": f"https://jobs.lever.co/{slug}",
+                "list_selector": defaults["list_selector"],
+                "title_selector": defaults["title_selector"],
+                "location_selector": defaults["location_selector"],
+                "link_selector": defaults["link_selector"],
+                "wait_selector": defaults["wait_selector"],
+                "source": f"selenium:lever:{slug}",
+                "domain_filter": "lever.co",
+                "absolute_base": "https://jobs.lever.co",
+                "sleep_seconds": lever_cfg.get("sleep_seconds", 3),
+            }
+            generated_sites.append(site)
+            generated_companies.append(slug)
+
+    greenhouse_cfg = company_sources_cfg.get("greenhouse") or {}
+    if greenhouse_cfg.get("enabled"):
+        defaults = {
+            "list_selector": greenhouse_cfg.get("list_selector") or "section.opening, div.opening, ul.openings li",
+            "title_selector": greenhouse_cfg.get("title_selector") or "a[href*='boards.greenhouse.io'], h3",
+            "location_selector": greenhouse_cfg.get("location_selector") or "span.location, div.location",
+            "link_selector": greenhouse_cfg.get("link_selector") or "a[href*='boards.greenhouse.io']",
+            "wait_selector": greenhouse_cfg.get("wait_selector") or "a[href*='boards.greenhouse.io']",
+        }
+        for _, slug in _normalize_company_entries(greenhouse_cfg.get("companies")):
+            if not slug or slug in seen_slugs:
+                continue
+            seen_slugs.add(slug)
+            site = {
+                "company": slug,
+                "url": f"https://boards.greenhouse.io/{slug}",
+                "careers_url": f"https://boards.greenhouse.io/{slug}",
+                "list_selector": defaults["list_selector"],
+                "title_selector": defaults["title_selector"],
+                "location_selector": defaults["location_selector"],
+                "link_selector": defaults["link_selector"],
+                "wait_selector": defaults["wait_selector"],
+                "source": f"selenium:greenhouse:{slug}",
+                "domain_filter": "greenhouse.io",
+                "absolute_base": "https://boards.greenhouse.io",
+                "sleep_seconds": greenhouse_cfg.get("sleep_seconds", 3),
+            }
+            generated_sites.append(site)
+            generated_companies.append(slug)
+
+    return generated_sites, generated_companies
+
+
+def _html_to_text(html: str) -> str:
+    if not html:
+        return ""
+    # Simple HTML tag removal
+    text = re.sub(r"<script.*?</script>", " ", html, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = re.sub(r"\s+", " ", text)
+    return text.strip()
+
+
+def _fetch_lever_jobs(slug: str, display_name: str, fetch_limit: int) -> List[dict[str, Any]]:
+    url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        postings = resp.json()
+        if not isinstance(postings, list):
+            return []
+    except Exception as exc:
+        print(f"[lever] Failed to fetch postings for {slug}: {exc}")
+        return []
+
+    jobs: List[dict[str, Any]] = []
+    for post in postings[:fetch_limit]:
+        if not isinstance(post, dict):
+            continue
+        title = post.get("text") or post.get("title")
+        job_url = (
+            post.get("hostedUrl")
+            or post.get("applyUrl")
+            or post.get("applyUrl")
+        )
+        if not title or not job_url:
+            continue
+        categories = post.get("categories") or {}
+        location = categories.get("location") or categories.get("commitment") or ""
+        desc_plain = post.get("descriptionPlain")
+        desc_html = post.get("description")
+        description = desc_plain or _html_to_text(desc_html or "")
+
+        jobs.append({
+            "title": title.strip(),
+            "company": display_name,
+            "location": location.strip(),
+            "url": job_url.strip(),
+            "description": description,
+            "source": f"lever:{slug}",
+        })
+    print(f"[lever] Retrieved {len(jobs)} jobs for {slug}")
+    return jobs
+
+
+def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int) -> List[dict[str, Any]]:
+    api_url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
+    try:
+        resp = requests.get(api_url, timeout=30)
+        resp.raise_for_status()
+        payload = resp.json()
+        jobs_payload = payload.get("jobs") if isinstance(payload, dict) else None
+        if not isinstance(jobs_payload, list):
+            return []
+    except Exception as exc:
+        print(f"[greenhouse] Failed to fetch jobs for {slug}: {exc}")
+        return []
+
+    jobs: List[dict[str, Any]] = []
+    for job in jobs_payload[:fetch_limit]:
+        if not isinstance(job, dict):
+            continue
+        job_id = job.get("id")
+        title = job.get("title")
+        absolute_url = job.get("absolute_url")
+        if not job_id or not title or not absolute_url:
+            continue
+        location = ""
+        if isinstance(job.get("location"), dict):
+            location = job["location"].get("name", "")
+
+        description_text = ""
+        detail_url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
+        try:
+            detail_resp = requests.get(detail_url, timeout=30)
+            detail_resp.raise_for_status()
+            detail_payload = detail_resp.json()
+            if isinstance(detail_payload, dict):
+                description_text = _html_to_text(detail_payload.get("content", ""))
+        except Exception as exc:
+            print(f"[greenhouse] Failed to fetch detail for {slug}/{job_id}: {exc}")
+
+        jobs.append({
+            "title": title.strip(),
+            "company": display_name,
+            "location": location.strip(),
+            "url": absolute_url.strip(),
+            "description": description_text,
+            "source": f"greenhouse:{slug}",
+        })
+    print(f"[greenhouse] Retrieved {len(jobs)} jobs for {slug}")
+    return jobs
+
+
+def fetch_company_source_jobs(company_sources_cfg: dict[str, Any], fetch_limit: int) -> List[dict[str, Any]]:
+    jobs: List[dict[str, Any]] = []
+    if not company_sources_cfg:
+        return jobs
+
+    lever_cfg = company_sources_cfg.get("lever") or {}
+    if lever_cfg.get("enabled"):
+        entries = _normalize_company_entries(lever_cfg.get("companies"))
+        per_company_limit = max(1, fetch_limit // max(1, len(entries))) if entries else fetch_limit
+        for raw_name, slug in entries:
+            display = raw_name or slug
+            jobs.extend(_fetch_lever_jobs(slug, display, per_company_limit))
+
+    greenhouse_cfg = company_sources_cfg.get("greenhouse") or {}
+    if greenhouse_cfg.get("enabled"):
+        entries = _normalize_company_entries(greenhouse_cfg.get("companies"))
+        per_company_limit = max(1, fetch_limit // max(1, len(entries))) if entries else fetch_limit
+        for raw_name, slug in entries:
+            display = raw_name or slug
+            jobs.extend(_fetch_greenhouse_jobs(slug, display, per_company_limit))
+
+    return jobs
 
 
 def fetch_serpapi_google_jobs(query: str, location: str | None, api_key: str, fetch_limit: int) -> list[dict[str, Any]]:
@@ -589,11 +854,95 @@ def main() -> None:
     serpapi_key = resolved_cfg.get("serpapi_key")
     jobs_arg = resolved_cfg.get("jobs")
     jobs_url_arg = resolved_cfg.get("jobs_url")
-    cfg_companies = resolved_cfg.get("companies") or []
     # Combined options from config
     free_opts = resolved_cfg.get("free_options") or {}
-    company_opts = resolved_cfg.get("company_options") or {}
     selenium_opts = resolved_cfg.get("selenium_options") or {}
+
+    selenium_sites = load_selenium_sites_from_opts(selenium_opts)
+
+    company_sources_cfg = resolved_cfg.get("company_sources") or {}
+    hosted_jobs = fetch_company_source_jobs(company_sources_cfg, int(resolved_cfg.get("fetch_limit", 200)))
+    fetched += hosted_jobs
+
+    source_sites, source_companies = generate_company_source_sites(company_sources_cfg)
+    if source_sites:
+        selenium_sites.extend(source_sites)
+
+    cfg_companies = resolved_cfg.get("companies") or []
+    if source_companies:
+        existing_lower = {c.lower() for c in cfg_companies if isinstance(c, str)}
+        for slug in source_companies:
+            if slug and slug.lower() not in existing_lower:
+                cfg_companies.append(slug)
+                existing_lower.add(slug.lower())
+        resolved_cfg["companies"] = cfg_companies
+
+    existing_site_companies: set[str] = set()
+    for site in selenium_sites:
+        if not isinstance(site, dict):
+            continue
+        comp = (site.get("company") or "").strip().lower()
+        if comp:
+            existing_site_companies.add(comp)
+
+    missing_companies = [
+        c for c in cfg_companies
+        if c and c.strip().lower() not in existing_site_companies
+    ]
+
+    if (
+        missing_companies
+        and LLM_SELENIUM_SITE_BUILDER_AVAILABLE
+        and generate_selenium_site_entries is not None
+    ):
+        print(f"[selenium-config] Generating site metadata for: {', '.join(missing_companies)}")
+        new_sites = generate_selenium_site_entries(missing_companies)
+        if new_sites:
+            existing_keys = {
+                (
+                    (site.get("company") or "").strip().lower(),
+                    (site.get("url") or "").strip().lower(),
+                )
+                for site in selenium_sites
+                if isinstance(site, dict)
+            }
+            added_companies: list[str] = []
+            for site in new_sites:
+                if not isinstance(site, dict):
+                    continue
+                company_slug = (site.get("company") or "").strip().lower()
+                url_slug = (site.get("url") or "").strip().lower()
+                key = (company_slug, url_slug)
+                if key in existing_keys:
+                    continue
+                existing_keys.add(key)
+                selenium_sites.append(site)
+                added_companies.append(company_slug or site.get("company", ""))
+
+            existing_site_companies.update(
+                [comp for comp in added_companies if comp]
+            )
+
+    if selenium_sites:
+        site_companies = [
+            s.get("company") for s in selenium_sites if isinstance(s, dict) and s.get("company")
+        ]
+        if site_companies:
+            combined: list[str] = []
+            seen_companies: set[str] = set()
+            for name in list(cfg_companies) + site_companies:
+                if not name:
+                    continue
+                normalized = str(name).strip()
+                if not normalized:
+                    continue
+                key = normalized.lower()
+                if key in seen_companies:
+                    continue
+                seen_companies.add(key)
+                combined.append(normalized)
+            cfg_companies = combined
+            resolved_cfg["companies"] = combined
     # Default behavior: run both if neither CLI nor config specifies otherwise
     run_both = bool(resolved_cfg.get("run_both", True))
 
@@ -662,8 +1011,7 @@ def main() -> None:
     use_selenium = bool(selenium_opts.get("enabled"))
     print(use_selenium)
     if use_selenium:
-        # Prefer explicit sites; otherwise derive from company_options
-        raw_sites = selenium_opts.get("sites") or build_selenium_sites_from_company_opts(cfg_companies)
+        raw_sites = selenium_opts.get("sites")
         try:
             def _u(x):
                 return x.get("url") if isinstance(x, dict) else str(x)

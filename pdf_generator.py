@@ -36,6 +36,18 @@ def _clean_markdown(text: str) -> str:
     """Remove markdown formatting (bold, italic, etc.) from text."""
     if not text:
         return text
+    # Convert markdown links [label](url) into "label: url"
+    def _link_repl(match: re.Match[str]) -> str:
+        label = match.group(1).strip()
+        url = match.group(2).strip()
+        if not label:
+            return url
+        # Standardize common profile labels
+        if label.lower() in {"github", "linkedin", "portfolio", "website"}:
+            return f"{label}: {url}"
+        return f"{label} ({url})"
+
+    text = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', _link_repl, text)
     # Remove bold (**text** or __text__)
     text = re.sub(r'\*\*(.*?)\*\*', r'\1', text)
     text = re.sub(r'__(.*?)__', r'\1', text)
@@ -43,6 +55,40 @@ def _clean_markdown(text: str) -> str:
     text = re.sub(r'(?<!\*)\*(?!\*)([^\*]+)\*(?!\*)', r'\1', text)
     text = re.sub(r'(?<!_)_(?!_)([^_]+)_(?!_)', r'\1', text)
     return text
+
+
+def _extract_contact_details(content: str, sections: dict) -> dict[str, str]:
+    """Extract email, phone, LinkedIn, and GitHub links from content/sections."""
+    details: dict[str, str] = {}
+    candidates = []
+    candidates.extend(content.splitlines()[:30])
+    contact_section = sections.get("contact")
+    if contact_section:
+        candidates.extend(contact_section.splitlines())
+
+    email_regex = re.compile(r'[\w\.-]+@[\w\.-]+\.\w+')
+    phone_regex = re.compile(r'(\+?\d[\d\s\-\(\)]{7,}\d)')
+    for line in candidates:
+        if not line:
+            continue
+        stripped = _clean_markdown(line.strip())
+        lower = stripped.lower()
+        if "linkedin.com" in lower and "linkedin" not in details:
+            details["linkedin"] = stripped
+        if "github.com" in lower and "github" not in details:
+            details["github"] = stripped
+        if "email" in lower:
+            match = email_regex.search(stripped)
+            if match:
+                details.setdefault("email", match.group(0))
+        else:
+            match = email_regex.search(stripped)
+            if match and "email" not in details:
+                details["email"] = match.group(0)
+        match_phone = phone_regex.search(stripped)
+        if match_phone and "phone" not in details:
+            details["phone"] = re.sub(r'\s+', ' ', match_phone.group(0)).strip()
+    return details
 
 
 class PDFGenerator:
@@ -196,24 +242,26 @@ r45        Generate a professional 3-page resume PDF
             if name_to_display:
                 story.append(Paragraph(name_to_display, self.styles['CustomHeader']))
             
-            # Contact information - extract from content directly
-            contact_lines = []
-            lines = content.split('\n')
-            for line in lines[:10]:  # Check first 10 lines
-                line_stripped = line.strip()
-                # Look for contact info (email, phone, github, linkedin)
-                if '@' in line_stripped or 'github.com' in line_stripped.lower() or 'linkedin.com' in line_stripped.lower() or any(char.isdigit() for char in line_stripped if len(line_stripped) > 7):
-                    # Remove markdown links but keep text
-                    contact_line = re.sub(r'\[([^\]]+)\]\([^\)]+\)', r'\1', line_stripped)
-                    contact_lines.append(contact_line)
+            contact_details = _extract_contact_details(content, sections)
+            mail_phone_parts = []
+            if contact_details.get("email"):
+                mail_phone_parts.append(contact_details["email"])
+            if contact_details.get("phone"):
+                mail_phone_parts.append(contact_details["phone"])
+            if mail_phone_parts:
+                story.append(Paragraph(" | ".join(mail_phone_parts), self.styles['ContactInfo']))
+            if contact_details.get("linkedin"):
+                story.append(Paragraph(f"LinkedIn URL: {contact_details['linkedin']}", self.styles['ContactInfo']))
+            if contact_details.get("github"):
+                story.append(Paragraph(f"Git Link: {contact_details['github']}", self.styles['ContactInfo']))
             
-            if contact_lines:
-                contact_text = ' | '.join(contact_lines)
-                story.append(Paragraph(contact_text, self.styles['ContactInfo']))
-            elif 'contact' in sections:
-                # Fallback to parsed contact
-                contact_text = sections['contact'].replace('\n', ' | ')
-                story.append(Paragraph(contact_text, self.styles['ContactInfo']))
+            # Add four horizontal lines in the middle area
+            if mail_phone_parts or contact_details.get("linkedin") or contact_details.get("github"):
+                story.append(Spacer(1, 0.1*inch))
+                line_text = "________________________________________________________________________________"
+                for _ in range(4):
+                    story.append(Paragraph(f"<para align='center'>{line_text}</para>", self.styles['Normal']))
+                story.append(Spacer(1, 0.1*inch))
             
             # Professional Summary (15 bullet points)
             summary_added = False
