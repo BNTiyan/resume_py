@@ -39,7 +39,7 @@ jobs:
       
       - name: Run job matcher
         run: |
-          cd resume_py-master
+          cd resume_py
           python match.py --config config.json
       
       - name: Upload generated resumes
@@ -48,7 +48,7 @@ jobs:
         with:
           name: generated-resumes
           path: |
-            resume_py-master/output/
-            resume_py-master/tailored_resumes/
-            resume_py-master/cover_letters/
+            resume_py/output/
+            resume_py/tailored_resumes/
+            resume_py/cover_letters/
           retention-days: 30
