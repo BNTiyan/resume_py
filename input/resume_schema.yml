@@ -1,0 +1,163 @@
+{
+  "basics": {
+    "name": "Bhavana Nare",
+    "label": "Software Engineer | MLOps & Cloud Security Analyst",
+    "email": "n.bhavana.reddy5@gmail.com",
+    "phone": "7067159912",
+    "location": "Georgia, USA (Based on education)",
+    "profiles": [
+      {
+        "network": "LinkedIn",
+        "username": "bhavana-nare-60657385",
+        "url": "https://www.linkedin.com/in/bhavana-nare-60657385/"
+      },
+      {
+        "network": "GitHub",
+        "username": "Bhavana5N",
+        "url": "https://github.com/Bhavana5N"
+      }
+    ],
+    "summary": [
+      "**9+ years of experience** as a Software Engineer and Full Stack Developer specializing in software development, system integration, and DevOps automation.",
+      "Expert in **Python, Django, Flask, React JS**, and key Cloud Technologies including **AWS and Azure**.",
+      "Proficient in designing scalable APIs, including **RESTful services and GraphQL queries**, tailored for microservices and real-time data aggregation.",
+      "Currently focusing on **MLOps and AI Governance** using cutting-edge tools like **Databricks and Hex**.",
+      "Experienced Cloud Security Analyst implementing **automated security patching** tools, vulnerability assessments, and **ML-based threat detection** models.",
+      "Skilled in deploying robust **AI and ML solutions** and enhancing operational efficiency through automated pipelines, including integration with **AWS SageMaker**.",
+      "Deep knowledge of industry standards, including **Functional Safety (ISO 26262)** and **Cybersecurity (ISO 21434)**."
+    ]
+  },
+  "skills": [
+    {
+      "name": "Programming Languages",
+      "keywords": ["Python", "C++", "JavaScript", "Django", "Flask", "Java", "Unix Shell Scripting", "React JS", "MySQL"]
+    },
+    {
+      "name": "ML/AI Frameworks & Platforms",
+      "keywords": ["PyTorch", "TensorFlow", "Keras", "OpenCV", "scikit-learn", "Pandas", "Numpy", "MLFlow", "OpenAI Gym", "AWS SageMaker", "Databricks", "Hex", "VERTEX AI"]
+    },
+    {
+      "name": "Cloud & DevOps",
+      "keywords": ["AWS (S3, Lambda, CloudFormation, DynamoDB, SageMaker)", "Azure Pipelines", "Docker", "Kubernetes", "Jenkins", "Ansible", "Terraform", "CI/CD Pipelines", "Bitbucket", "Artifactory"]
+    },
+    {
+      "name": "Data Management",
+      "keywords": ["Snowflake", "PostgreSQL", "SQLite", "Oracle", "AWS DynamoDB", "SQL"]
+    },
+    {
+      "name": "Functional Expertise",
+      "keywords": ["ML Pipeline Development", "Computational Trust Modeling", "Computer Vision (2D/3D Mapping, Object Detection)", "Functional Safety (ISO 26262, ASIL)", "Cybersecurity (ISO 21434)", "GraphQL & REST API Development"]
+    }
+  ],
+  "work": [
+    {
+      "company": "Rivian Automotive, LLC",
+      "position": "Product Owner for Mechanic Patch Manager- Python MLOps Engineer",
+      "startDate": "May 2025",
+      "endDate": "Present",
+      "highlights": [
+        "Led product roadmap for developer-facing security tooling, defining and prioritizing epics and user stories for internal security, platform, and ML teams.",
+        "Delivered Databricks workloads, GraphQL data services, and Hex dashboards for forecasting high-risk dependencies and real-time patching prioritization.",
+        "Coordinated ML-driven features (auto PR tagging, anomaly detection) to accelerate developer response time to security vulnerabilities.",
+        "Shipped automation bots (Renovate, Dependabot) to harden CI/CD pipelines and improve developer security posture and productivity."
+      ],
+      "technologies": ["Python", "GraphQL", "Databricks", "Hex", "SQL", "GitLab", "VERTEX AI"]
+    },
+    {
+      "company": "Robert Bosch, Michigan",
+      "position": "Product Owner – Python Engineer / System Safety Engineer & Software Integrator CSW",
+      "startDate": "August 2023",
+      "endDate": "April 2025",
+      "highlights": [
+        "Built resilient microservices and deployed highly available software components using Azure, Kubernetes, Docker, and Terraform.",
+        "Developed RESTful APIs using Django, integrating machine learning models for real-time data processing.",
+        "Ensured functional safety compliance by leading cross-functional reviews and aligning development with ISO 26262 and ASPICE standards."
+      ],
+      "achievements": [
+        "Reduced manual validation and testing efforts by **70%** through end-to-end automation using tools like Jenkins, Docker, and Azure services.",
+        "Improved workflow efficiency and team productivity by automating PR creation and dependency management with Azure Pipelines and Conan modules.",
+        "Integrated Snowflake for real-time data analytics, improving the scalability and performance of ML pipelines.",
+        "Developed a robust framework for system safety compliance and validation, ensuring alignment with ISO standards across all development phases."
+      ],
+      "technologies": ["DOORS", "Python", "Shell Script", "C++", "JSON", "Conan", "Azure Pipelines", "Django", "Docker", "YAML", "DynamoDB", "ReactJS"]
+    },
+    {
+      "company": "Continental Automotive India Private Limited",
+      "position": "System Engineer and Scrum Master – ADAS Camera Object Detection",
+      "startDate": "May 2019",
+      "endDate": "July 2021",
+      "highlights": [
+        "Developed scalable computer vision solutions for ADAS using Python and C++, enhancing object detection models with Kalman filters.",
+        "Managed Agile ceremonies (sprint planning, retrospectives) while simultaneously automating deployment processes using CI/CD pipelines on AWS.",
+        "Built event-driven workflows utilizing AWS Lambda, S3, and DynamoDB for scalable data ingestion and real-time object detection."
+      ],
+      "achievements": [
+        "Successfully integrated labeled data from Oracle databases for training object detection models.",
+        "Migrated object detection functionality from 2D box mapping to **3D box mapping**, improving system accuracy and performance.",
+        "Created a prototype for the COD component and expanded it to support multiple integrations, reducing manual effort by **70%** (AUTOSIM project).",
+        "Developed APIs for visualization and test analysis, enabling faster debugging and decision-making (AUTOSIM project)."
+      ],
+      "technologies": ["Python", "C++", "Oracle", "Dash", "Flask", "SQLite", "AWS Services (Lambda, S3, EC2)", "Django", "ReactJS"]
+    },
+    {
+      "company": "Teradata India Private Limited",
+      "position": "Python Developer and Data Analyst",
+      "startDate": "August 2018",
+      "endDate": "May 2019",
+      "highlights": [
+        "Designed and implemented APIs for the PYTERADATA tool (Python interface for SQL Analytical Functions).",
+        "Worked with advanced data analytical functions (Ntree, DecisionTree, KNN) on the Teradata Database."
+      ],
+      "achievements": [
+        "Enhanced the development process by **automating Python test case generation** based on JSON inputs, reducing manual effort and improving consistency.",
+        "Gained in-depth knowledge of advanced data analytical functions and their application on Teradata Database.",
+        "Improved team collaboration and productivity by actively participating in Agile ceremonies."
+      ],
+      "technologies": ["Python", "SQL", "JAVA", "JIRA", "GIT"]
+    },
+    {
+      "company": "Tata Consultancy Services",
+      "position": "Senior Software Engineer",
+      "startDate": "June 2014",
+      "endDate": "August 2018",
+      "highlights": [
+        "Automated the installation of components on virtual and real nodes using Python and Linux environments.",
+        "Configured and maintained **Jenkins pipelines** to fetch code from Git, perform regression testing, and upload packages to Artifactory."
+      ],
+      "achievements": [
+        "Designed and implemented innovative tools (**csmcli, csmlint, CSM Config, csm2iso**) that improved deployment workflows, resulting in faster and more reliable releases.",
+        "Enhanced deployment reliability by automating the installation process for real and virtual nodes.",
+        "Delivered comprehensive client demos of the tools, receiving positive feedback for significantly **reducing release times** and efficiently addressing new requirements."
+      ],
+      "technologies": ["Python", "Linux", "VirtualBox", "Jenkins", "KIWI", "Artifactory", "Shell Scripting", "PyYaml", "Gerrit", "SonarQube"]
+    }
+  ],
+  "education": [
+    {
+      "institution": "University of Georgia, Athens, Georgia",
+      "area": "Computer Science Thesis",
+      "studyType": "Master of Computer Science",
+      "startDate": "August 2021",
+      "endDate": "May 2023",
+      "gpa": "3.7/4.0",
+      "notes": "Published research on a Computational Trust Framework at the University of Georgia, implementing machine learning models for dynamic trust scoring in human-robot teams."
+    },
+    {
+      "institution": "Sree Vidyanikethan Engineering College, Tirupati, Andhra Pradesh",
+      "area": "Computer Science",
+      "studyType": "Bachelor of Technology",
+      "startDate": "October 2010",
+      "endDate": "April 2014",
+      "gpa": "7.9/10"
+    }
+  ],
+  "publications": [
+    {
+      "name": "Computational Trust Framework",
+      "publisher": "University of Georgia (Master's Thesis/Research)",
+      "releaseDate": "May 2023",
+      "summary": "Research implementing machine learning models for dynamic trust scoring in human-robot teams, published during the Master of Computer Science program."
+    }
+  ],
+  "awards": []
+}

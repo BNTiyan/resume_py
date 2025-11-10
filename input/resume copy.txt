@@ -1,0 +1,180 @@
+Bhavana Nare
+7067159912 n.bhavana.reddy5@gmail.com
+Git Link: https://github.com/Bhavana5N
+LinkedIn Profile: https://www.linkedin.com/in/bhavana-nare-60657385/
+
+EDUCATION
+Master of Computer Science Thesis (Aug 2021 – May 2023) University of Georgia, Athens, Georgia GPA: 3.7/4
+• Thesis research published as IEEE Xplore Document 11127674 on computational trust for human-robot collaboration.
+Bachelor of Technology – Computer Science (Oct 2010 – Apr 2014) Sree Vidyanikethan Engineering College, Tirupati, Andhra Pradesh GPA:7.9/10
+
+PROFESSIONAL SUMMARY
+Proficient in Python, C++, and JavaScript, with a strong foundation in database management and cloud services.
+GraphQL and API Development skilled in designing scalable APIs, RESTful services, and GraphQL queries for microservices architecture and real-time data aggregation
+Currently working with cutting-edge technologies including Databricks, Hex, and implementing AI governance practices in MLOps workflows
+Currently working as Cloud Security Analyst implementing automated security patching tools, vulnerability assessment systems, and ML-based threat detection models
+Skilled in deploying robust AI and ML solutions, enhancing system functionalities, and driving operational efficiencies through automated workflows.
+My expertise encompasses designing and implementing scalable software solutions, managing end-to-end software development life cycles, and leading agile project teams.
+Software Engineer and Full Stack Developer with over 9 years of experience in software development, system integration, and DevOps automation, specializing in Python, Django, Flask, React JS, and Cloud Technologies like AWS and Azure.
+Expertise in Python Libraries including NumPy, Pandas, scikit-learn, PyTorch, TensorFlow, and Matplotlib for data processing, machine learning, and AI applications.
+Proficient in developing scalable web applications using Django, Flask, React JS, and Dash, with backends powered by PostgreSQL, SQLite,
+Hands-on experience in building ML pipelines integrated with AWS SageMaker and AWS Lambda, ensuring real-time data processing, deployment, and resource optimization.
+Experience with computer vision projects, including camera object detection, 2D-to-3D box mapping, and emergency braking assistance, using OpenCV and custom models.
+Designed and implemented robust data pipelines using Snowflake, DynamoDB, and SQL databases, ensuring scalability and efficient data storage.
+Followed functional safety standards (ISO 26262) and cybersecurity (ISO 21434), with experience in ASIL compliance.
+Developed and maintained automation frameworks, including tools like csmcli and csmlint, to streamline deployment workflows using YAML configurations and Artifactory.
+Led end-to-end development for AUTOSIM and IMS_DASHBOARD, integrating cloud APIs, creating visualization tools, and reducing manual effort by up to 70%.
+Proficient in Linux system administration, shell scripting, and version control tools like Git, Bitbucket, and Confluence for project management.
+Experienced in building task management dashboards and workflow reporting tools, leveraging React JS, Django, and AWS S3 for storage and real-time updates.
+Processed API requests or automates tasks, such as triggering events when new data is uploaded to S3 or handling backend logic for AUTOSIM workflows using AWS Lambda services
+Published IEEE Xplore publication (Document 11127674) on a Computational Trust Framework for human-robot teams, leading machine learning research on dynamic trust scoring and safety alignment. https://ieeexplore.ieee.org/document/11127674
+
+TECHNICAL SKILLS
+Programming Languages: Python, C++, Django, Flask, Java, Unix Shell Scripting, React JS, MySQL
+Frameworks & Platforms: PyTorch, TensorFlow, Keras, OpenCV, scikit-learn, Pandas, Numpy, MLFlow, OpenAI Gym
+Cloud Technologies: AWS (S3, Lambda, CloudFormation, DynamoDB, SageMaker), Azure Pipelines
+Automation & DevOps Tools: Docker, Jenkins, Ansible, Terraform, CI/CD Pipelines, Bitbucket, Artifactory
+Data Management: Snowflake, PostgreSQL, SQLite, Oracle, AWS DynamoDB, SQL
+Visualization Tools: Plotly, Dash, Matplotlib, Draw.io
+Testing & Debugging Tools: SonarQube, PyYaml, Pylint, JSON
+Software Development Life Cycle (SDLC): Agile Methodology, V-Model, DevOps Practices
+Version Control: Git, GitHub, Bitbucket
+Operating Systems: Linux (Ubuntu, RedHat), macOS
+
+Functional Expertise:
+Machine Learning & AI: ML pipeline development, clustering algorithms, trust modeling in human-robot systems, Bayesian models
+Software Integration & Validation: Middleware analysis, system debugging, testbench validation, end-to-end integration
+Pipeline Automation: CI/CD pipeline creation, PR automation, dependency management with Conan
+Full Stack Development: Flask, Django, Dash, React JS, SQL databases
+Computer Vision: Camera object detection, 2D to 3D box mapping, emergency braking assistance systems
+
+PUBLICATIONS
+- Bhavana Nare, et al., "Computational Trust Framework for Human-Robot Teams," IEEE Xplore, Document 11127674, 2024. Available at https://ieeexplore.ieee.org/document/11127674
+
+PROFESSIONAL EXPERIENCE
+Company: Rivian Automotive, LLC May 2025 – Present
+Python MLOps Engineer
+Cybersecurity MOAB:
+Technologies: Python, GraphQL, Databricks, Hex, SQL, GitLab, VERTEX AI
+Key Contributions & Responsibilities:
+Designed and implemented automation tools like Renovate Bot and DependBot for dependency updates and security patching, integrating with CI/CD workflows to streamline and secure development pipelines.
+Developed GraphQL queries to aggregate and analyze software dependency and security data across microservices, enabling real-time risk assessment.
+Leveraged Databricks for scalable data processing and machine learning workflows, implementing models to predict high-risk dependencies and prioritize security patches based on historical trends.
+Utilized Hex to build dynamic dashboards visualizing AI-driven security insights, dependency aging, and model-driven patch prioritization to guide engineering decisions.
+Developed ML-based recommendation systems for automated pull request creation, tagging appropriate reviewers based on historical contribution patterns and domain expertise.
+Integrated anomaly detection models to identify irregular commit behaviors or dependency changes that may signal security threats.
+Collaborated cross-functionally with ML engineers and security analysts to align tooling with AI governance and MLOps best practices.
+Applied ML models for classification of security vulnerabilities, reducing triage time and accelerating response workflows.
+
+Company: Robert Bosch, Michigan August 2023 – April 2025
+Python Full Stack Developer, Software Integrator, and MLOps Engineer
+System Safety Engineer & Software Integrator CSW (Complete Software)
+Technologies: DOORS, Python, Shell Script, C++, JSON, Conan, Testbench Hardware, Azure, Django, Docker, Yaml, DynamoDB (No SQL) and ReactJS
+Key Contributions & Responsibilities:
+Developed and optimized robust, scalable systems for applications using Python, Shell Script, and C++.
+Utilized Azure to design and deploy resilient software components, ensuring high availability and performance.
+Automated CI/CD pipelines using Azure Pipelines and Git, improving deployment efficiency and reducing manual intervention.
+Built RESTful APIs using Django for seamless backend interactions and ensured efficient database management with PostgreSQL and DynamoDB.
+Integrated RESTful APIs with machine learning models for real-time data processing.
+Implemented end-to-end test automation using Docker and Jenkins to improve software validation and system integration.
+Conducted extensive system monitoring and performance evaluation through hardware-in-the-loop (HIL) simulations and real-world testing.
+Collaborated across teams to ensure compliance with ISO 26262 and ASPICE standards, enhancing system safety and reliability.
+Managed cloud infrastructure and automation using Docker, and YAML configurations for scalable and optimized deployments.
+Developed and deployed machine learning pipelines, integrating real-time data processing to support system-level diagnostics and improvements.
+Enhanced API endpoints with robust validation and security mechanisms, ensuring secure and high-performance integration with external systems.
+Led cross-functional team collaborations, including functional safety reviews, and ensured successful product integration by managing dependencies and configurations.
+Conducted comprehensive hardware-software integration testing using advanced debugging tools to validate system functionality and reliability.
+Utilized Azure and AWS to design, deploy, and manage resilient cloud-native software components, ensuring high availability, fault tolerance, and top-tier performance.
+Built and maintained microservices architectures using Kubernetes, Docker, enabling modular, scalable, and maintainable systems.
+Automated CI/CD pipelines with Azure Pipelines, Git, and Terraform, dramatically improving deployment speed and reducing manual interventions.
+Experience with Kubernetes and Docker for containerized model deployment.
+Implemented logging and monitoring solutions for system health checks.
+Achievements:
+Reduced manual validation and testing efforts by 70% through end-to-end automation using tools like Jenkins, Docker, and Azure services.
+Improved workflow efficiency and team productivity by automating PR creation and dependency management with Azure Pipelines and Conan modules.
+Integrated Snowflake for real-time data analytics, improving the scalability and performance of ML pipelines.
+Developed a robust framework for system safety compliance and validation, ensuring alignment with ISO standards across all development phases.
+
+Company: Continental Automotive India Private Limited, Bangalore, Karnataka May 2019 - July 2021
+System Engineer and Scrum Master – ADAS Camera Object Detection
+Camera Object Detection (COD) - Computer Vision
+Role: System Engineer and Scrum Master
+Technologies: Python, C++, Oracle, Doors, Dash, Flask, SQLite
+Responsibilities:
+Designed and developed scalable computer vision solutions for Advanced Driver Assistance Systems (ADAS) using Python and C++.
+Developed simulation frameworks to validate localization algorithms under diverse environmental conditions.
+Enhanced object detection models by integrating 2D to 3D mapping algorithms and refining localization techniques using Kalman filters.
+Led cross-functional team collaborations to define system requirements, ensure effective data processing, and integrate computer vision modules.
+Developed RESTful APIs to facilitate smooth interactions between vision models and external software components.
+Automated workflows and data integration pipelines using Python and SQL, reducing manual processes and optimizing system updates.
+Utilized AWS services such as AWS Lambda, S3, and EC2 to enable event-driven workflows, scalable object storage, and compute-intensive tasks for real-time object detection.
+Managed data processing pipelines on AWS to handle large-scale data ingestion, ensuring reliable data availability for object detection and localization tasks.
+Implemented cloud-based data storage and retrieval using AWS S3 and DynamoDB, optimizing system performance and reducing latency.
+Managed Agile ceremonies, including sprint planning and retrospectives, to improve team productivity and maintain timely project delivery.
+Deployed scalable cloud-based solutions on AWS and managed efficient data storage and retrieval using Oracle databases.
+Implemented unit and system-level testing, ensuring system robustness and performance under diverse operational conditions.
+Collaborated with cross-functional teams to streamline data labeling, training, and deployment processes for object detection models.
+Automated deployment processes using CI/CD pipelines on AWS, ensuring reliable updates and reducing manual interventions.
+Created detailed documentation on project progress, system designs, and deployment configurations to support continuous improvements.
+Achievements:
+Successfully integrated labeled data from Oracle databases for training object detection models.
+Migrated object detection functionality from 2D box mapping to 3D box mapping, improving system accuracy and performance.
+
+AUTOSIM
+Role: Python AWS Developer
+Technologies: Python, Django, ReactJS, AWS Services
+Responsibilities:
+Designed AWS CloudFormation templates for infrastructure automation, including Lambda functions, Step functions and IAM policies.
+Developed Python scripts for API integration, data processing, and storing KPI results in DynamoDB.
+Utilized an S3 bucket for storing large CSV files related to camera object detection data, ensuring secure and efficient data handling.
+Designed AWS Cloud Formation templates to create custom lambda functions and to set up IAM policies for users, database templates using Python (BOTO3 & AWS CLI) and JSON Templates.
+Built a GUI for visualizing test reports and managing test configurations, improving user accessibility.
+Designed and deployed cloud-based architectures with AWS Lambda, EC2, CloudFormation.
+Built scalable solutions for data ingestion and storage using AWS S3, DynamoDB.
+Implemented event-driven workflows in AWS for automation.
+Achievements:
+Created a prototype for the COD component and expanded it to support multiple integrations, reducing manual effort by 70%.
+Developed APIs for visualization and test analysis, enabling faster debugging and decision-making.
+Leveraged AWS services for scalable API management and secure data storage.
+
+Company: Teradata India Private Limited, Hyderabad, Telangana Aug 2018 - May 2019
+Python Developer and Data Analyst
+PYTERADATA: Tool to provide Python interface for SQL Analytical Functions on Teradata Database.
+Technologies: Python, SQL, JAVA, JIRA and GIT
+Responsibilities:
+Designed and implemented APIs for the PYTERADATA tool using JSON and Java, enabling seamless integration with Python interfaces.
+Automated Python test file generation based on JSON inputs, improving testing efficiency.
+Worked extensively with SQL queries on the Teradata Database to validate analytical functions.
+Learned and implemented various data analytical functions like Ntree, DecisionTree, and KNN for data-driven insights.
+Utilized Git for version control and collaborated with cross-functional teams using Agile and Scrum methodologies.
+Leveraged Object-Oriented Programming (OOP) principles to develop and optimize data analytical functions for the Teradata Database Server.
+Achievements:
+Enhanced the development process by automating Python test case generation, reducing manual effort and improving consistency.
+Gained in-depth knowledge of advanced data analytical functions and their application on Teradata Database.
+Improved team collaboration and productivity by actively participating in Agile ceremonies, including sprint planning and retrospectives.
+
+Company: Tata Consultancy Services Hyderabad, Telangana Jun 2014 - Aug 2018
+Senior Software Engineer
+DX: DX is a toolbox which support to install components on real nodes and to create virtual environment to support testing for all components. It contains 7 tools which will help to install components to provide services for telecom industry.
+Technologies: Python, Linux, VirtualBox, Jenkins, KIWI, Artifactory, Shell Scripting, PyYaml, Gerrit, SonarQube, Eforge, Confluence
+Responsibilities:
+Automated the installation of components on virtual nodes using Python and Linux environments.
+Created and managed virtual nodes using VirtualBox, simulating real-world deployment scenarios.
+Implemented unit and functional test suites to validate component installations and ensure deployment reliability.
+Integrated test suites with Jenkins pipelines to achieve continuous integration and delivery (CI/CD).
+Developed and enhanced tools to streamline deployment processes, leveraging YAML configurations for defining and deploying systems across various environments.
+Created and maintained:
+csmcli: A CLI tool to efficiently update YAML files for system configurations.
+csmlint: A validation tool for ensuring the accuracy and consistency of YAML configurations.
+CSM Config: A configuration generator for deployment systems.
+csm2iso: A utility to convert configurations into ISO files for seamless package installations.
+Automated package management with Artifactory Manager, enabling XML-based input for downloading and managing dependencies.
+Integrated Python scripting with Agile and DevOps methodologies to enhance efficiency and reliability in the software engineering lifecycle.
+Configured and maintained Jenkins pipelines as a bridge between development and operations, automating to fetch the latest code from Git repositories, performing regression testing and uploading validated packages to Artifactory.
+Achievements:
+Enhanced deployment reliability by automating the installation process for real and virtual nodes.
+Improved testing efficiency with the seamless integration of functional test suites into Jenkins pipelines.
+Designed and implemented innovative tools that improved deployment workflows, resulting in faster and more reliable releases.
+Delivered comprehensive client demos of the tools, receiving positive feedback for significantly reducing release times and efficiently addressing new requirements.
+
+
