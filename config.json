@@ -189,15 +189,15 @@
       },
       {
         "company": "morganstanley",
-        "url": "https://careers.morganstanley.com/us/en/search-results",
+        "url": "https://www.morganstanley.com/careers/career-opportunities-search",
         "list_selector": "li[class*='job'], article[class*='job'], div[class*='job-result']",
         "title_selector": "a[class*='job-title'], h2, h3",
         "location_selector": "span[class*='job-location'], span[class*='location'], div[class*='location']",
         "link_selector": "a[href*='/job/']",
         "source": "selenium:morganstanley",
-        "careers_url": "https://careers.morganstanley.com/",
+        "careers_url": "https://www.morganstanley.com/careers",
         "domain_filter": "morganstanley.com",
-        "absolute_base": "https://careers.morganstanley.com",
+        "absolute_base": "https://www.morganstanley.com/careers",
         "sleep_seconds": 3,
         "wait_selector": "li[class*='job'], article[class*='job'], div[class*='job-result']"
       },
