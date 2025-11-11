@@ -392,7 +392,7 @@ def _fetch_lever_jobs(slug: str, display_name: str, fetch_limit: int) -> List[di
     return jobs
 
 
-def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int) -> List[dict[str, Any]]:
+def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int, country_filter: str | None = None) -> List[dict[str, Any]]:
     api_url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
     try:
         resp = requests.get(api_url, timeout=30)
@@ -406,6 +406,21 @@ def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int) -> Li
         return []
 
     jobs: List[dict[str, Any]] = []
+    # Prepare country aliases for simple filtering
+    norm_country = (country_filter or "").strip().lower()
+    aliases: list[str] = []
+    if norm_country:
+        if norm_country in {"usa", "us", "u.s.", "united states", "united states of america"}:
+            aliases = ["usa", "us", "u.s.", "united states", "united states of america"]
+        elif norm_country in {"uk", "u.k.", "united kingdom"}:
+            aliases = ["uk", "u.k.", "united kingdom", "england", "scotland", "wales", "northern ireland"]
+        elif norm_country in {"uae", "united arab emirates"}:
+            aliases = ["uae", "united arab emirates"]
+        elif norm_country in {"germany", "deutschland"}:
+            aliases = ["germany", "deutschland"]
+        else:
+            aliases = [norm_country]
+
     for job in jobs_payload[:fetch_limit]:
         if not isinstance(job, dict):
             continue
@@ -417,6 +432,13 @@ def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int) -> Li
         location = ""
         if isinstance(job.get("location"), dict):
             location = job["location"].get("name", "")
+
+        # Country filter: include only if location matches desired country aliases
+        if aliases:
+            loc_lower = (location or "").strip().lower()
+            if not any(alias in loc_lower for alias in aliases):
+                # Skip non-matching locations
+                continue
 
         description_text = ""
         detail_url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs/{job_id}"
@@ -441,7 +463,7 @@ def _fetch_greenhouse_jobs(slug: str, display_name: str, fetch_limit: int) -> Li
     return jobs
 
 
-def fetch_company_source_jobs(company_sources_cfg: dict[str, Any], fetch_limit: int) -> List[dict[str, Any]]:
+def fetch_company_source_jobs(company_sources_cfg: dict[str, Any], fetch_limit: int, country_filter: str | None = None) -> List[dict[str, Any]]:
     jobs: List[dict[str, Any]] = []
     if not company_sources_cfg:
         return jobs
@@ -458,9 +480,11 @@ def fetch_company_source_jobs(company_sources_cfg: dict[str, Any], fetch_limit: 
     if greenhouse_cfg.get("enabled"):
         entries = _normalize_company_entries(greenhouse_cfg.get("companies"))
         per_company_limit = max(1, fetch_limit // max(1, len(entries))) if entries else fetch_limit
+        # Allow per-provider override: company_sources.greenhouse.country
+        gh_country = (greenhouse_cfg.get("country") or country_filter)
         for raw_name, slug in entries:
             display = raw_name or slug
-            jobs.extend(_fetch_greenhouse_jobs(slug, display, per_company_limit))
+            jobs.extend(_fetch_greenhouse_jobs(slug, display, per_company_limit, gh_country))
 
     return jobs
 
@@ -765,7 +789,11 @@ def main() -> None:
 
     fetched: list[dict[str, Any]] = []
     company_sources_cfg = resolved_cfg.get("company_sources") or {}
-    hosted_jobs = fetch_company_source_jobs(company_sources_cfg, int(resolved_cfg.get("fetch_limit", 200)))
+    hosted_jobs = fetch_company_source_jobs(
+        company_sources_cfg,
+        int(resolved_cfg.get("fetch_limit", 200)),
+        country_filter=country,
+    )
     fetched += hosted_jobs
 
     source_sites, source_companies = generate_company_source_sites(company_sources_cfg)
