@@ -27,7 +27,12 @@ def load_config(config_path: Path) -> Dict[str, Any]:
 def build_jobs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     company_sources = config.get("company_sources") or {}
     fetch_limit = int(config.get("fetch_limit", 200))
-    return fetch_company_source_jobs(company_sources, fetch_limit)
+    # Prefer explicit greenhouse country if provided, else top-level country
+    gh_country = (
+        (company_sources.get("greenhouse") or {}).get("country")
+        or config.get("country")
+    )
+    return fetch_company_source_jobs(company_sources, fetch_limit, gh_country)
 
 
 def run_pipeline(config_path: Path) -> Dict[str, Any]:
