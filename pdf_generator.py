@@ -253,20 +253,21 @@ r45        Generate a professional 3-page resume PDF
                 story.append(Paragraph(name_to_display, self.styles['CustomHeader']))
             
             contact_details = _extract_contact_details(content, sections)
-            mail_phone_parts = []
+            # Single line: Email | Phone | GitHub | LinkedIn (only present values, in this order)
+            contact_line_parts = []
             if contact_details.get("email"):
-                mail_phone_parts.append(contact_details["email"])
+                contact_line_parts.append(contact_details["email"])
             if contact_details.get("phone"):
-                mail_phone_parts.append(contact_details["phone"])
-            if mail_phone_parts:
-                story.append(Paragraph(" | ".join(mail_phone_parts), self.styles['ContactInfo']))
-            if contact_details.get("linkedin"):
-                story.append(Paragraph(f"LinkedIn URL: {contact_details['linkedin']}", self.styles['ContactInfo']))
+                contact_line_parts.append(contact_details["phone"])
             if contact_details.get("github"):
-                story.append(Paragraph(f"Git Link: {contact_details['github']}", self.styles['ContactInfo']))
+                contact_line_parts.append(contact_details["github"])
+            if contact_details.get("linkedin"):
+                contact_line_parts.append(contact_details["linkedin"])
+            if contact_line_parts:
+                story.append(Paragraph(" | ".join(contact_line_parts), self.styles['ContactInfo']))
             
             # Add four horizontal lines in the middle area
-            if mail_phone_parts or contact_details.get("linkedin") or contact_details.get("github"):
+            if contact_line_parts:
                 story.append(Spacer(1, 0.15*inch))
             
             # Professional Summary (15 bullet points)
