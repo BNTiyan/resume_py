@@ -4,6 +4,7 @@
   "country": "usa",
   "fetch_limit": 100,
   "min_score": 40,
+  "min_match_score": 40,
   "top_per_company": true,
   "top_per_company_limit": 2,
   "parallel_workers": 5,

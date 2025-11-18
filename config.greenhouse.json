@@ -1,11 +1,13 @@
 {
   "resume": "input/resume.yml",
   "top": 100,
+  "companies": ["Figma", "Stripe", "Dropbox"],
+  "min_match_score": 30,
+  "score_threshold": 30,
   "country": "usa",
   "fetch_limit": 100,
-  "min_score": 40,
   "top_per_company": true,
-  "top_per_company_limit": 2,
+  "top_per_company_limit": 10,
   "parallel_workers": 5,
   "run_both": true,
   "save_fetched": true,
@@ -32,9 +34,9 @@
     "prefix": "matches_daily"
   },
   "autofill": {
-    "enabled": false,
+    "enabled": true,
     "providers": ["workday", "greenhouse", "lever"],
-    "max_jobs": 1,
+    "max_jobs": 5,
     "headless": false,
     "wait_seconds": 25,
     "resume_path": "input/resume.yml",
@@ -61,7 +63,7 @@
     "model": "gpt-4o-mini"
   },
   "auto_tailor_resume": true,
-  "tailor_threshold": 40,
+  "tailor_threshold": 30,
   "cover_letter": {
     "resume": "input/resume.yml",
     "jd": "input/jd.txt",
@@ -87,14 +89,6 @@
           "slug": "figma"
         },
         {
-          "name": "Canva",
-          "slug": "canva"
-        },
-        {
-          "name": "Notion",
-          "slug": "notion"
-        },
-        {
           "name": "Stripe",
           "slug": "stripe"
         },
@@ -106,4 +100,3 @@
     }
   }
 }
-
