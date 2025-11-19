@@ -2267,7 +2267,15 @@ def main() -> None:
                                                 continue
                                             key = _asset_key(job)
                                             assets = job_assets.get(job_url) or job_assets.get(key) or {}
-                                            resume_path = assets.get("resume") or resume_default
+                                            
+                                            # Prefer PDF resume if available
+                                            resume_path = None
+                                            pdf_path_str = assets.get("resume_pdf")
+                                            if pdf_path_str and Path(pdf_path_str).exists():
+                                                resume_path = pdf_path_str
+                                            else:
+                                                resume_path = assets.get("resume") or resume_default
+                                            
                                             cover_path = assets.get("cover_letter") or cover_default
                                             if resume_path:
                                                 resume_path = str(Path(resume_path).expanduser())
@@ -2296,7 +2304,15 @@ def main() -> None:
                                                 continue
                                             key = _asset_key(job)
                                             assets = job_assets.get(job_url) or job_assets.get(key) or {}
-                                            resume_path = assets.get("resume") or resume_default
+                                            
+                                            # Prefer PDF resume if available
+                                            resume_path = None
+                                            pdf_path_str = assets.get("resume_pdf")
+                                            if pdf_path_str and Path(pdf_path_str).exists():
+                                                resume_path = pdf_path_str
+                                            else:
+                                                resume_path = assets.get("resume") or resume_default
+                                                
                                             cover_path = assets.get("cover_letter") or cover_default
                                             if resume_path:
                                                 resume_path = str(Path(resume_path).expanduser())

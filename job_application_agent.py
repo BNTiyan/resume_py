@@ -30,7 +30,11 @@ from resume_utils import load_resume_data
 logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] [%(name)s] %(levelname)s: %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
+    datefmt='%Y-%m-%d %H:%M:%S',
+    handlers=[
+        logging.FileHandler("execution.log", mode='w'),
+        logging.StreamHandler()
+    ]
 )
 logger = logging.getLogger("JobAgent")
 
