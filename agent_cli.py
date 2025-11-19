@@ -57,6 +57,7 @@ Examples:
     parser.add_argument(
         "--auto-submit",
         action="store_true",
+        default=True,
         help="Automatically submit applications"
     )
     parser.add_argument(
