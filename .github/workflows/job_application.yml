@@ -11,9 +11,7 @@ jobs:
     permissions:
       contents: read
     
-    defaults:
-      run:
-        working-directory: ./resume_py-master
+
 
     steps:
       - name: Checkout code
@@ -42,6 +40,7 @@ jobs:
           # Secrets must be configured in GitHub Repository Settings -> Secrets and variables -> Actions
           WORKDAY_EMAIL: ${{ secrets.WORKDAY_EMAIL }}
           WORKDAY_PASSWORD: ${{ secrets.WORKDAY_PASSWORD }}
+          WORKDAY_PASSWORD_SECONDARY: ${{ secrets.WORKDAY_PASSWORD_SECONDARY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Optional: Add other keys if you use them
@@ -57,8 +56,8 @@ jobs:
         with:
           name: application-data
           path: |
-            resume_py-master/output/
-            resume_py-master/execution.log
-            resume_py-master/agent_results.json
+            output/
+            execution.log
+            agent_results.json
           retention-days: 7
 
