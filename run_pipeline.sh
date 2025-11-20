@@ -47,6 +47,10 @@ echo "🚀 Starting Job Application Agent..."
 echo "   Log file: execution.log"
 echo "----------------------------------------"
 
+if [ ! -z "$WORKDAY_PASSWORD_SECONDARY" ]; then
+    echo "ℹ️  Secondary password configured."
+fi
+
 # Install requirements if needed (uncomment if running in fresh env)
 # pip install -r requirements.txt
 
@@ -65,4 +69,3 @@ else
 fi
 
 exit $EXIT_CODE
-
