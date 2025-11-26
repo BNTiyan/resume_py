@@ -3,10 +3,10 @@
   "top": 100,
   "country": "usa",
   "fetch_limit": 100,
-  "min_score": 40,
-  "min_match_score": 40,
+  "min_score": 35,
+  "min_match_score": 35,
   "top_per_company": true,
-  "top_per_company_limit": 2,
+  "top_per_company_limit": 3,
   "parallel_workers": 5,
   "run_both": true,
   "selenium_only": true,
@@ -34,8 +34,9 @@
     "nvidia",
     "amd",
     "intel",
-    "qualcomm"
-    
+    "qualcomm",
+    "cox",
+    "zoox"
   ],
   "target_roles": [
     "software engineer",
@@ -43,14 +44,31 @@
     "principal software engineer",
     "staff software engineer",
     "machine learning engineer",
+    "senior machine learning engineer",
     "ml engineer",
+    "senior ml engineer",
     "mlops engineer",
+    "senior mlops engineer",
+    "mlops",
+    "ml ops engineer",
+    "ml ops",
+    "ai ml engineer",
+    "ai engineer",
+    "applied scientist",
+    "research scientist",
+    "data scientist",
+    "senior data scientist",
     "data engineer",
+    "senior data engineer",
     "backend engineer",
+    "senior backend engineer",
     "full stack engineer",
     "cloud engineer",
     "devops engineer",
     "site reliability engineer",
+    "sre",
+    "platform engineer",
+    "infrastructure engineer",
     "cybersecurity engineer"
   ],
   "target_locations": [],
@@ -379,6 +397,32 @@
         "domain_filter": "qualcomm.wd5.myworkdayjobs.com",
         "absolute_base": "https://qualcomm.wd5.myworkdayjobs.com",
         "sleep_seconds": 5
+      },
+      {
+        "company": "cox",
+        "url": "https://jobs.coxenterprises.com/en/jobs",
+        "list_selector": "div[class*='job-card'], li[class*='job'], a[href*='/job/']",
+        "title_selector": "h2, h3, a[class*='job-title']",
+        "location_selector": "span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job/']",
+        "source": "selenium:cox",
+        "careers_url": "https://jobs.coxenterprises.com/",
+        "domain_filter": "coxenterprises.com",
+        "absolute_base": "https://jobs.coxenterprises.com",
+        "sleep_seconds": 3
+      },
+      {
+        "company": "zoox",
+        "url": "https://zoox.com/careers/",
+        "list_selector": "div[class*='job-listing'], div[class*='career-item'], a[href*='/careers/']",
+        "title_selector": "h3, h4, a[class*='job-title'], span[class*='title']",
+        "location_selector": "span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/careers/'], a[href*='/jobs/']",
+        "source": "selenium:zoox",
+        "careers_url": "https://zoox.com/careers/",
+        "domain_filter": "zoox.com",
+        "absolute_base": "https://zoox.com",
+        "sleep_seconds": 3
       }
     ],
     "extra_sites": []
@@ -388,9 +432,9 @@
     "prefix": "matches_daily"
   },
   "autofill": {
-    "enabled": false,
+    "enabled": true,
     "providers": ["workday", "greenhouse", "lever"],
-    "max_jobs": 1,
+    "max_jobs": 5,
     "headless": false,
     "wait_seconds": 25,
     "resume_path": "input/resume.yml",
@@ -413,8 +457,9 @@
     }
   },
   "openai": {
-    "enabled": true,
-    "model": "gpt-4o-mini"
+    "enabled": false,
+    "model": "gpt-4o-mini",
+    "note": "OpenAI disabled by default. Set ENABLE_OPENAI=true to use. Gemini and Ollama are free alternatives."
   },
   "auto_tailor_resume": true,
   "tailor_threshold": 40,
