@@ -262,7 +262,7 @@
       },
       {
         "company": "oracle",
-        "url": "https://careers.oracle.com/en/sites/jobsearch/jobs?keyword=python&location=United+States&locationId=300000000149325&locationLevel=country&mode=location",
+        "url": "https://careers.oracle.com/en/sites/jobsearch/jobs?keyword=python&location=United+States&locationId=300000000149325&mode=location",
         "list_selector": "a[data-ui='requisition-item'], li[data-ui='requisition-item'], div[class*='job'] a[href*='/job/'], tr[data-ui='requisition-item']",
         "title_selector": "[data-ui='job-title'], span[class*='job-title'], h3, h4, a[href*='/job/'], td[data-ui='job-title']",
         "location_selector": "[data-ui='job-location'], span[class*='job-location'], [class*='location'], td[data-ui='job-location']",
