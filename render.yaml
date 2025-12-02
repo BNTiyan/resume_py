@@ -3,7 +3,7 @@ services:
     name: quick-apply
     env: python
     plan: free
-    buildCommand: pip install -r requirements_web.txt
+    buildCommand: pip install -r requirements_web_minimal.txt
     startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION

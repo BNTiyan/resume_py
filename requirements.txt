@@ -9,7 +9,7 @@ langchain-openai==0.3.35
 langchain-core==0.3.79
 langchain-community==0.3.27
 langchain-text-splitters==0.3.11
-faiss-cpu==1.9.0
+faiss-cpu>=1.9.0.post1
 python-dotenv==1.0.1
 reportlab==4.2.5
 playwright==1.55.0
