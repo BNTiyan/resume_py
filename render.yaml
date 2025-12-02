@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: quick-apply
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements_web.txt
+    startCommand: gunicorn web_app:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
+      - key: GEMINI_API_KEY
+        sync: false
+
