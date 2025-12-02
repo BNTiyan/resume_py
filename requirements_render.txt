@@ -1,15 +1,18 @@
-# Ultra-minimal requirements for Quick Apply Web App
-# Optimized for Render.com free tier - NO C dependencies!
+# Complete requirements for Quick Apply Web App on Render.com
+# All dependencies needed - NO C compilation required!
 
 # Web Framework
 flask==3.0.0
 flask-cors==4.0.0
 gunicorn==21.2.0
 
-# HTTP & Web Scraping (pure Python, no compilation needed)
+# HTTP & Web Scraping
 requests==2.31.0
 beautifulsoup4==4.12.2
-html5lib==1.1  # Pure Python parser for BeautifulSoup
+html5lib==1.1
+
+# Fast string matching (needed by match.py)
+rapidfuzz>=3.0.0
 
 # Document Generation
 python-docx==1.1.0
@@ -18,10 +21,13 @@ reportlab==4.0.7
 # Data Processing
 PyYAML==6.0.1
 
-# LLM APIs (choose based on your env variable)
+# LLM APIs
 google-generativeai>=0.3.1
+openai>=1.3.0
 
-# Note: Removed lxml (requires C compilation)
-# Note: Removed openai to reduce dependencies (add if needed)
-# Note: html5lib is slower than lxml but works on all platforms
+# Optional but recommended
+python-dotenv>=1.0.0
 
+# Note: All packages are pure Python or have pre-built wheels
+# Note: No lxml (replaced with html5lib)
+# Note: No faiss-cpu (not needed for web app)
