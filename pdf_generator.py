@@ -289,21 +289,18 @@ r45        Generate a professional 3-page resume PDF
                 story.append(Paragraph(name_to_display, self.styles['CustomHeader']))
             
             contact_details = _extract_contact_details(content, sections)
-            # Single line: Email | Phone | GitHub | LinkedIn (only present values, in this order)
-            contact_line_parts = []
+            # Display contact info on separate lines
             if contact_details.get("email"):
-                contact_line_parts.append(contact_details["email"])
+                story.append(Paragraph(contact_details["email"], self.styles['ContactInfo']))
             if contact_details.get("phone"):
-                contact_line_parts.append(contact_details["phone"])
+                story.append(Paragraph(contact_details["phone"], self.styles['ContactInfo']))
             if contact_details.get("github"):
-                contact_line_parts.append(contact_details["github"])
+                story.append(Paragraph(contact_details["github"], self.styles['ContactInfo']))
             if contact_details.get("linkedin"):
-                contact_line_parts.append(contact_details["linkedin"])
-            if contact_line_parts:
-                story.append(Paragraph(" | ".join(contact_line_parts), self.styles['ContactInfo']))
+                story.append(Paragraph(contact_details["linkedin"], self.styles['ContactInfo']))
             
-            # Add four horizontal lines in the middle area
-            if contact_line_parts:
+            # Add spacing after contact info
+            if contact_details:
                 story.append(Spacer(1, 0.15*inch))
             
             # Professional Summary (15 bullet points)

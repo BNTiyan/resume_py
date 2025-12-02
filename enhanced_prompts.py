@@ -23,8 +23,20 @@ Job Description: {job_description}
 4. Match candidate's experience to these requirements and HIGHLIGHT matching achievements prominently
 
 1. **Header Section:**
-   - Candidate's full name
-   - Contact: Email | Phone | GitHub | LinkedIn (all on one line)
+   - Line 1: Candidate's full name (bold/large font, centered)
+   - Line 2: Email address (centered)
+   - Line 3: Phone number with country code (centered)
+   - Line 4: GitHub URL (full URL, centered)
+   - Line 5: LinkedIn URL (full URL, centered)
+   - Example:
+     ```
+     Bhavana Nare
+     n.bhavana.reddy5@gmail.com
+     +1-706-715-9912
+     https://github.com/Bhavana5N
+     https://www.linkedin.com/in/bhavana-nare-60657385
+     ```
+   - MUST extract from candidate's background if not explicitly provided
 
 2. **PROFESSIONAL SUMMARY - MUST HAVE EXACTLY 15 BULLET POINTS:**
    Section header: "PROFESSIONAL SUMMARY"
@@ -171,20 +183,28 @@ Job Description: {job_description}
 
 **OUTPUT FORMAT:**
 ```
-Full Name
-email@domain.com | Phone | github.com/username | linkedin.com/in/username
+Bhavana Nare
+n.bhavana.reddy5@gmail.com
++1-706-715-9912
+https://github.com/Bhavana5N
+https://www.linkedin.com/in/bhavana-nare-60657385
 
 PROFESSIONAL SUMMARY
-• [Bullet point 1 with  techincal details ]
-• [Bullet point 2 with  techincal details ]
-• [Bullet point 3 with  techincal details ]
-• [Bullet point 4 with  techincal details ]
-• [Bullet point 5 with  techincal details ]
-• [Bullet point 6 with  techincal details ]
-• [Bullet point 7 with  techincal details ]
-• [Bullet point 8 with  techincal details ]
-• [Bullet point 9 with  techincal details ]
-• [Bullet point 10 with  techincal details ]
+• [Bullet point 1 with technical details]
+• [Bullet point 2 with technical details]
+• [Bullet point 3 with technical details]
+• [Bullet point 4 with technical details]
+• [Bullet point 5 with technical details]
+• [Bullet point 6 with technical details]
+• [Bullet point 7 with technical details]
+• [Bullet point 8 with technical details]
+• [Bullet point 9 with technical details]
+• [Bullet point 10 with technical details]
+• [Bullet point 11 with technical details]
+• [Bullet point 12 with technical details]
+• [Bullet point 13 with technical details]
+• [Bullet point 14 with technical details]
+• [Bullet point 15 with technical details]
 
 WORK EXPERIENCE
 
@@ -250,6 +270,13 @@ PUBLICATIONS
 ```
 
 **CRITICAL RULES:**
+- **CONTACT INFORMATION IS MANDATORY** - ALWAYS include the full header with:
+  * Line 1: Candidate's full name
+  * Line 2: Email address
+  * Line 3: Phone number with country code (+1-XXX-XXX-XXXX)
+  * Line 4: GitHub URL (FULL URL starting with https://)
+  * Line 5: LinkedIn URL (FULL URL starting with https://)
+  * Each contact detail on its OWN SEPARATE LINE
 - NO generic placeholders like "Company" or "Position" - ALWAYS use REAL names from candidate's background
 - COMPANY NAMES ARE MANDATORY - every position MUST include the company name after the position title
 - If position title contains "|", format as: "Position Part 1 | Position Part 2 | Company Name" (company is LAST)

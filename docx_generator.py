@@ -179,24 +179,38 @@ class WordDocumentGenerator:
                 name_run.font.color.rgb = RGBColor(0, 0, 0)
             
             contact_details = _extract_contact_details(content, sections_dict)
-            # Single centered line: Email | Phone | GitHub | LinkedIn (only present values, in this order)
-            contact_line_parts = []
+            # Display contact info on separate centered lines
             if contact_details.get("email"):
-                contact_line_parts.append(contact_details["email"])
+                email_para = doc.add_paragraph(contact_details["email"])
+                email_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                email_para.paragraph_format.space_after = Pt(3)
+                if email_para.runs:
+                    email_para.runs[0].font.size = Pt(10)
+                    email_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
+            
             if contact_details.get("phone"):
-                contact_line_parts.append(contact_details["phone"])
+                phone_para = doc.add_paragraph(contact_details["phone"])
+                phone_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                phone_para.paragraph_format.space_after = Pt(3)
+                if phone_para.runs:
+                    phone_para.runs[0].font.size = Pt(10)
+                    phone_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
+            
             if contact_details.get("github"):
-                contact_line_parts.append(contact_details["github"])
+                github_para = doc.add_paragraph(contact_details["github"])
+                github_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                github_para.paragraph_format.space_after = Pt(3)
+                if github_para.runs:
+                    github_para.runs[0].font.size = Pt(10)
+                    github_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
+            
             if contact_details.get("linkedin"):
-                contact_line_parts.append(contact_details["linkedin"])
-            if contact_line_parts:
-                contact_para = doc.add_paragraph(" | ".join(contact_line_parts))
-                contact_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                contact_para.paragraph_format.space_after = Pt(6)
-                if contact_para.runs:
-                    run = contact_para.runs[0]
-                    run.font.size = Pt(10)
-                    run.font.color.rgb = RGBColor(80, 80, 80)
+                linkedin_para = doc.add_paragraph(contact_details["linkedin"])
+                linkedin_para.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                linkedin_para.paragraph_format.space_after = Pt(6)
+                if linkedin_para.runs:
+                    linkedin_para.runs[0].font.size = Pt(10)
+                    linkedin_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
 
             if contact_line_parts:
                 doc.add_paragraph()
