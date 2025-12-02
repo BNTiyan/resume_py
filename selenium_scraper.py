@@ -394,13 +394,15 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
                         try:
                             # Look for job ID in various attributes
                             job_id = None
-                            for attr in ['id', 'data-id', 'data-job-id', 'data-jobid', 'aria-label']:
+                            for attr in ['id', 'data-id', 'data-job-id', 'data-jobid', 'aria-label', 'data-job-requisition-id']:
                                 val = elem.get_attribute(attr) or ""
-                                # Extract numeric ID
+                                # Extract job ID (keep as string to avoid number truncation)
                                 import re
-                                id_match = re.search(r'\d+', val)
+                                # Match full alphanumeric ID (not just first digits)
+                                id_match = re.search(r'(\d{10,}[-\w]*)', val)  # Match 10+ digits, optionally followed by hyphens/words
                                 if id_match:
-                                    job_id = id_match.group(0)
+                                    job_id = id_match.group(1)  # Keep full ID as string
+                                    print(f"  [selenium-debug] Extracted job ID: {job_id}")
                                     break
                             
                             if job_id:
@@ -410,13 +412,14 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
                                     f"{absolute_base}/job/{job_id}",
                                     f"{absolute_base}/careers/{job_id}",
                                     f"{absolute_base}/en-us/jobs/{job_id}",
+                                    f"{absolute_base}/about/careers/applications/jobs/results/{job_id}",  # Google specific
                                 ]
                                 for pattern in base_patterns:
                                     link = pattern
-                                    print(f"  [selenium-debug] Method 6 (constructed from ID {job_id}) found: {link[:80]}")
+                                    print(f"  [selenium-debug] Method 6 (constructed from ID {job_id}) found: {link[:120]}")  # Show more chars
                                     break
-                        except Exception:
-                            pass
+                        except Exception as e:
+                            print(f"  [selenium-debug] Method 6 failed: {e}")
                     
                     # Normalize relative links
                     if link and absolute_base and link.startswith('/'):

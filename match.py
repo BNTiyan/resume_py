@@ -720,6 +720,7 @@ def keyword_matches_job(job: dict[str, Any], target_roles: list[str], resume_ski
 def fetch_job_description_from_url(url: str, timeout: int = 15, max_retries: int = 2) -> str:
     """
     Fetch full job description from a job URL with timeout and retry logic.
+    Skips expired/filled jobs.
     
     Args:
         url: Job posting URL
@@ -727,7 +728,7 @@ def fetch_job_description_from_url(url: str, timeout: int = 15, max_retries: int
         max_retries: Number of retry attempts on failure
     
     Returns:
-        Extracted job description text
+        Extracted job description text, or empty string if job is expired/error
     """
     import time
     
@@ -747,6 +748,57 @@ def fetch_job_description_from_url(url: str, timeout: int = 15, max_retries: int
             response.raise_for_status()
             
             soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Check for visa/citizenship restrictions FIRST (higher priority)
+            page_text_lower = response.text.lower()
+            
+            visa_restrictions = [
+                'visa sponsorship is not available',
+                'visa / work permit sponsorship is not available',
+                'work permit sponsorship is not available',
+                'no visa sponsorship',
+                'does not sponsor visas',
+                'will not sponsor work authorization',
+                'must be authorized to work',
+                'must be legally authorized to work',
+                'us citizenship required',
+                'u.s. citizenship required',
+                'must be a us citizen',
+                'must be a u.s. citizen',
+                'citizenship is required',
+                'active security clearance required',
+                'must possess an active security clearance',
+                'must possess and maintain an active',
+                'requires us citizenship'
+            ]
+            
+            for restriction in visa_restrictions:
+                if restriction in page_text_lower:
+                    print(f"  [fetch-skipped] Visa/citizenship restriction: {url[:60]}")
+                    return ""  # Return empty to skip this job
+            
+            # Check for expired/filled job indicators
+            expired_indicators = [
+                'job has been filled',
+                'job you are trying to apply for has been filled',
+                'position has been filled',
+                'no longer accepting applications',
+                'job posting has expired',
+                'this job is no longer available',
+                'position is no longer available',
+                'application deadline has passed',
+                'job has closed',
+                'posting has closed',
+                'job not found',  # Google specific
+                'this job may have been taken down',  # Google specific
+                'job may have been removed',
+                'position has been removed'
+            ]
+            
+            for indicator in expired_indicators:
+                if indicator in page_text_lower:
+                    print(f"  [fetch-expired] Job filled/expired: {url[:60]}")
+                    return ""  # Return empty to skip this job
             
             # Remove unwanted elements
             for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe']):
@@ -863,15 +915,21 @@ def enrich_jobs_with_descriptions(
                 print(f"  ❌ Error processing {job.get('company')}: {e}")
                 enriched.append(job)
     
-    # Step 3: Merge back with non-matching jobs (keep all jobs, enrich only matching ones)
-    enriched_urls = {job["url"] for job in enriched if job.get("url")}
-    final_jobs = enriched.copy()
+    # Step 3: Filter out expired/failed jobs (empty descriptions) and merge
+    enriched_valid = [job for job in enriched if job.get("description") and len(job.get("description", "")) > 100]
+    enriched_expired = len(enriched) - len(enriched_valid)
+    
+    if enriched_expired > 0:
+        print(f"[fetch-desc] Filtered out {enriched_expired} expired/invalid jobs")
+    
+    enriched_urls = {job["url"] for job in enriched_valid if job.get("url")}
+    final_jobs = enriched_valid.copy()
     
     for job in jobs:
         if job.get("url") not in enriched_urls:
             final_jobs.append(job)
     
-    print(f"[fetch-desc] Completed. {len(enriched)} jobs enriched with descriptions\n")
+    print(f"[fetch-desc] Completed. {len(enriched_valid)} valid jobs enriched with descriptions\n")
     return final_jobs
 
 
