@@ -1,0 +1,27 @@
+# Ultra-minimal requirements for Quick Apply Web App
+# Optimized for Render.com free tier - NO C dependencies!
+
+# Web Framework
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+
+# HTTP & Web Scraping (pure Python, no compilation needed)
+requests==2.31.0
+beautifulsoup4==4.12.2
+html5lib==1.1  # Pure Python parser for BeautifulSoup
+
+# Document Generation
+python-docx==1.1.0
+reportlab==4.0.7
+
+# Data Processing
+PyYAML==6.0.1
+
+# LLM APIs (choose based on your env variable)
+google-generativeai>=0.3.1
+
+# Note: Removed lxml (requires C compilation)
+# Note: Removed openai to reduce dependencies (add if needed)
+# Note: html5lib is slower than lxml but works on all platforms
+
