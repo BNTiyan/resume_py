@@ -543,3 +543,84 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
             pass
     return results
 
+
+def fetch_selenium_site_parallel(site: dict[str, Any], fetch_limit: int) -> list[dict[str, Any]]:
+    """
+    Fetch jobs from a single Selenium site (for parallel processing).
+    
+    Args:
+        site: Site configuration dictionary
+        fetch_limit: Maximum number of jobs to fetch
+    
+    Returns:
+        List of job dictionaries
+    """
+    if not SELENIUM_AVAILABLE:
+        return []
+    
+    driver = create_headless_driver()
+    if driver is None:
+        return []
+    
+    results: list[dict[str, Any]] = []
+    
+    try:
+        # Use the existing fetch_selenium_sites logic for a single site
+        temp_results = fetch_selenium_sites([site], fetch_limit)
+        results.extend(temp_results)
+    except Exception as e:
+        print(f"[selenium-parallel] Error fetching {site.get('company', 'unknown')}: {str(e)[:100]}")
+    finally:
+        try:
+            driver.quit()
+        except Exception:
+            pass
+    
+    return results
+
+
+def fetch_selenium_sites_parallel(sites: list[Any], fetch_limit: int, max_workers: int = 3) -> list[dict[str, Any]]:
+    """
+    Fetch jobs from multiple Selenium sites in parallel.
+    
+    Args:
+        sites: List of site configurations
+        fetch_limit: Maximum number of jobs to fetch per site
+        max_workers: Number of parallel Selenium drivers (default: 3, don't use too many)
+    
+    Returns:
+        Combined list of job dictionaries from all sites
+    """
+    if not SELENIUM_AVAILABLE:
+        return []
+    
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    print(f"\n[selenium-parallel] Fetching from {len(sites)} sites with {max_workers} parallel workers...")
+    
+    results: list[dict[str, Any]] = []
+    per_site_limit = max(1, fetch_limit // max(1, len(sites)))
+    
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all sites for parallel fetching
+        future_to_site = {
+            executor.submit(fetch_selenium_site_parallel, site, per_site_limit): site 
+            for site in sites
+        }
+        
+        # Collect results as they complete
+        for idx, future in enumerate(as_completed(future_to_site), 1):
+            site = future_to_site[future]
+            company = site.get('company', 'unknown')
+            
+            try:
+                site_jobs = future.result()
+                results.extend(site_jobs)
+                print(f"  [selenium-parallel] {idx}/{len(sites)} - {company}: ✅ {len(site_jobs)} jobs")
+            except Exception as e:
+                print(f"  [selenium-parallel] {idx}/{len(sites)} - {company}: ❌ {str(e)[:50]}")
+    
+    print(f"[selenium-parallel] Completed: {len(results)} total jobs from {len(sites)} sites\n")
+    
+    return results
+

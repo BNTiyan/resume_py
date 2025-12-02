@@ -679,6 +679,202 @@ def check_sponsorship_available(jd_text: str, check_enabled: bool = False) -> bo
     return True  # Sponsorship likely available
 
 
+def keyword_matches_job(job: dict[str, Any], target_roles: list[str], resume_skills: set[str]) -> bool:
+    """
+    Check if job title/description matches target roles or resume skills.
+    
+    Args:
+        job: Job dictionary with title, description
+        target_roles: List of target role names (e.g., ["software engineer", "ml engineer"])
+        resume_skills: Set of skills from resume (e.g., {"python", "tensorflow", "kubernetes"})
+    
+    Returns:
+        True if job matches keywords
+    """
+    title_lower = (job.get("title") or "").lower()
+    desc_lower = (job.get("description") or "").lower()
+    company_lower = (job.get("company") or "").lower()
+    
+    # Check if title matches any target role
+    for role in target_roles:
+        role_lower = role.lower()
+        if role_lower in title_lower:
+            return True
+    
+    # Check if key skills appear in title or short description
+    if resume_skills:
+        # Look for skills in title (highest weight)
+        title_words = set(title_lower.split())
+        if len(title_words & resume_skills) >= 1:  # At least 1 skill match in title
+            return True
+        
+        # Look for skills in description if available
+        if desc_lower:
+            desc_words = set(desc_lower.split())
+            if len(desc_words & resume_skills) >= 2:  # At least 2 skills match in description
+                return True
+    
+    return False
+
+
+def fetch_job_description_from_url(url: str, timeout: int = 15, max_retries: int = 2) -> str:
+    """
+    Fetch full job description from a job URL with timeout and retry logic.
+    
+    Args:
+        url: Job posting URL
+        timeout: Request timeout in seconds (reduced for faster failure)
+        max_retries: Number of retry attempts on failure
+    
+    Returns:
+        Extracted job description text
+    """
+    import time
+    
+    for attempt in range(max_retries):
+        try:
+            import requests
+            from bs4 import BeautifulSoup
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Connection': 'keep-alive',
+            }
+            
+            response = requests.get(url, headers=headers, timeout=timeout, allow_redirects=True)
+            response.raise_for_status()
+            
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Remove unwanted elements
+            for tag in soup(['script', 'style', 'nav', 'header', 'footer', 'aside', 'iframe']):
+                tag.decompose()
+            
+            # Extract text
+            text = soup.get_text(separator=' ', strip=True)
+            # Clean up whitespace
+            text = re.sub(r'\s+', ' ', text)
+            
+            # Limit length
+            if len(text) > 10000:
+                text = text[:10000]
+            
+            return text
+        
+        except requests.Timeout:
+            if attempt < max_retries - 1:
+                print(f"  [fetch-timeout] Retry {attempt + 1}/{max_retries} for {url[:60]}...")
+                time.sleep(1)  # Brief pause before retry
+                continue
+            else:
+                print(f"  [fetch-timeout] Timeout after {max_retries} attempts: {url[:60]}")
+                return ""
+        
+        except requests.RequestException as e:
+            if attempt < max_retries - 1:
+                print(f"  [fetch-error] Retry {attempt + 1}/{max_retries}: {str(e)[:50]}")
+                time.sleep(1)
+                continue
+            else:
+                print(f"  [fetch-error] Failed after {max_retries} attempts: {url[:60]} - {str(e)[:50]}")
+                return ""
+        
+        except Exception as e:
+            print(f"  [fetch-error] Unexpected error for {url[:60]}: {str(e)[:50]}")
+            return ""
+    
+    return ""
+
+
+def enrich_jobs_with_descriptions(
+    jobs: list[dict[str, Any]], 
+    target_roles: list[str],
+    resume_skills: set[str],
+    max_workers: int = 5
+) -> list[dict[str, Any]]:
+    """
+    Enrich jobs with full descriptions by:
+    1. Filtering jobs that match keywords (title/skills)
+    2. Fetching full description from job URL
+    3. Returning enriched jobs
+    
+    Args:
+        jobs: List of job dictionaries
+        target_roles: Target role keywords
+        resume_skills: Skills extracted from resume
+        max_workers: Number of parallel workers
+    
+    Returns:
+        List of jobs with descriptions
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    
+    # Step 1: Filter jobs that match keywords
+    print(f"\n[keyword-match] Checking {len(jobs)} jobs for keyword matches...")
+    matching_jobs = []
+    
+    for job in jobs:
+        if keyword_matches_job(job, target_roles, resume_skills):
+            matching_jobs.append(job)
+            title = job.get("title", "")[:50]
+            company = job.get("company", "")
+            print(f"  ✅ Match: {company} - {title}")
+    
+    print(f"[keyword-match] Found {len(matching_jobs)} jobs matching keywords")
+    
+    if not matching_jobs:
+        print("[keyword-match] No matching jobs found")
+        return jobs
+    
+    # Step 2: Fetch descriptions for matching jobs
+    print(f"\n[fetch-desc] Fetching descriptions for {len(matching_jobs)} jobs (parallel workers: {max_workers})...")
+    
+    def fetch_one(job: dict[str, Any]) -> dict[str, Any]:
+        url = job.get("url", "").strip()
+        if not url or len(job.get("description", "")) > 500:
+            # Already has description
+            return job
+        
+        company = job.get("company", "")[:20]
+        title = job.get("title", "")[:40]
+        print(f"  [fetching] {company} - {title}")
+        
+        description = fetch_job_description_from_url(url)
+        if description and len(description) > 200:
+            job["description"] = description
+            print(f"  ✅ Fetched {len(description)} chars for {company}")
+        else:
+            print(f"  ⚠️  Failed or short description for {company}")
+        
+        return job
+    
+    enriched = []
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, job): job for job in matching_jobs}
+        
+        for future in as_completed(futures):
+            try:
+                result = future.result()
+                enriched.append(result)
+            except Exception as e:
+                job = futures[future]
+                print(f"  ❌ Error processing {job.get('company')}: {e}")
+                enriched.append(job)
+    
+    # Step 3: Merge back with non-matching jobs (keep all jobs, enrich only matching ones)
+    enriched_urls = {job["url"] for job in enriched if job.get("url")}
+    final_jobs = enriched.copy()
+    
+    for job in jobs:
+        if job.get("url") not in enriched_urls:
+            final_jobs.append(job)
+    
+    print(f"[fetch-desc] Completed. {len(enriched)} jobs enriched with descriptions\n")
+    return final_jobs
+
+
 def score_job(job: dict[str, Any], resume_text: str) -> float:
     title = job.get("title", "")
     fields = "\n".join([
@@ -934,7 +1130,18 @@ def main() -> None:
         except Exception:
             pass
         if raw_sites:
-            selenium_jobs = fetch_selenium_sites(raw_sites, int(resolved_cfg.get("fetch_limit", 200)))
+            # Use parallel Selenium fetching for better performance
+            from selenium_scraper import fetch_selenium_sites_parallel
+            
+            selenium_workers = min(3, len(raw_sites))  # Max 3 parallel drivers to avoid resource issues
+            print(f"[selenium] Using parallel fetching with {selenium_workers} workers...")
+            
+            selenium_jobs = fetch_selenium_sites_parallel(
+                raw_sites, 
+                int(resolved_cfg.get("fetch_limit", 200)),
+                max_workers=selenium_workers
+            )
+            
             # Debug: Log URL availability from Selenium
             selenium_with_urls = sum(1 for j in selenium_jobs if j.get("url"))
             selenium_without_urls = len(selenium_jobs) - selenium_with_urls
@@ -950,16 +1157,71 @@ def main() -> None:
     if country:
         fetched = [j for j in fetched if _matches_country(j.get("location"), country)]
 
+    # Enrich jobs with full descriptions based on keyword matching
+    target_roles = resolved_cfg.get("target_roles", [])
+    # Extract skills from resume for keyword matching
+    resume_skills = set()
+    resume_lower = resume_text.lower()
+    common_skills = {
+        "python", "java", "javascript", "typescript", "c++", "go", "rust", "scala",
+        "react", "angular", "vue", "node", "django", "flask", "spring",
+        "tensorflow", "pytorch", "keras", "scikit-learn", "pandas", "numpy",
+        "aws", "azure", "gcp", "kubernetes", "docker", "terraform",
+        "sql", "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
+        "kafka", "spark", "airflow", "mlflow", "kubeflow",
+        "machine learning", "deep learning", "nlp", "computer vision", "mlops"
+    }
+    for skill in common_skills:
+        if skill in resume_lower:
+            resume_skills.add(skill)
+    
+    print(f"\n[keyword-match] Resume skills detected: {sorted(list(resume_skills)[:20])}")
+    print(f"[keyword-match] Target roles: {target_roles[:10]}")
+    
+    # Enrich matching jobs with descriptions
+    if target_roles or resume_skills:
+        fetched = enrich_jobs_with_descriptions(
+            fetched, 
+            target_roles, 
+            resume_skills,
+            max_workers=resolved_cfg.get("parallel_workers", 5)
+        )
+    
     # Score and select
-    scored = []
-    for job in fetched:
-        # Debug: Log URL before scoring
+    print(f"\n[score] Scoring {len(fetched)} jobs with parallel workers...")
+    
+    from concurrent.futures import ThreadPoolExecutor as Executor, as_completed
+    
+    def score_single_job(job: dict[str, Any]) -> dict[str, Any]:
+        """Score a single job and return with score and country"""
         if not job.get("url"):
             print(f"[score-debug] Job without URL: {job.get('company', 'N/A')} - {job.get('title', 'N/A')[:50]} (source: {job.get('source', 'N/A')})")
         s = score_job(job, resume_text)
         # derive country value for CSV
         cval = "usa" if _matches_country(job.get("location"), "usa") else ""
-        scored.append({**job, "score": round(s, 2), "country": cval})
+        return {**job, "score": round(s, 2), "country": cval}
+    
+    # Parallel scoring
+    scored = []
+    max_score_workers = min(resolved_cfg.get("parallel_workers", 5), len(fetched))
+    
+    with Executor(max_workers=max_score_workers) as executor:
+        future_to_job = {executor.submit(score_single_job, job): job for job in fetched}
+        
+        for idx, future in enumerate(as_completed(future_to_job), 1):
+            try:
+                result = future.result()
+                scored.append(result)
+                if idx % 10 == 0:  # Progress update every 10 jobs
+                    print(f"  [score] Progress: {idx}/{len(fetched)} jobs scored")
+            except Exception as e:
+                job = future_to_job[future]
+                print(f"  [score-error] Failed to score {job.get('company')}: {e}")
+                # Add job with score 0 to not lose it
+                scored.append({**job, "score": 0.0, "country": ""})
+    
+    print(f"[score] Completed scoring {len(scored)} jobs")
+    
     scored.sort(key=lambda x: x["score"], reverse=True)
     top = scored[: top_n]
     

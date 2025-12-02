@@ -14,6 +14,7 @@ This agent orchestrates all components and can run continuously or on-demand.
 import os
 import json
 import time
+import csv
 from typing import Any, Dict, List, Optional, Callable
 from datetime import datetime
 from pathlib import Path
@@ -538,7 +539,76 @@ class JobApplicationAgent:
         with open(metadata_path, "w", encoding="utf-8") as f:
             json.dump(application.to_dict(), f, indent=2)
         
+        # Track application in CSV
+        self._append_to_applications_csv(application, output_dir, company_dir, safe_company)
+        
         logger.info(f"  Saved application materials to {company_dir}")
+    
+    def _append_to_applications_csv(
+        self, 
+        application: JobApplication, 
+        output_dir: Path, 
+        company_dir: Path,
+        safe_company: str
+    ) -> None:
+        """
+        Append application details to a CSV file for easy tracking.
+        
+        CSV includes: Company, Title, Location, Job URL, Score, Status,
+        Resume Path, Cover Letter Path, Generated At, Submitted At
+        """
+        csv_path = output_dir / "applications_tracker.csv"
+        
+        # Determine file paths
+        safe_title = "".join(c if c.isalnum() else "_" for c in (application.title or "resume"))
+        
+        # Resume path (prefer PDF, fallback to TXT)
+        pdf_path = output_dir / "tailored_resumes" / f"{safe_company}_{safe_title}.pdf"
+        resume_path = str(pdf_path.relative_to(output_dir)) if pdf_path.exists() else ""
+        if not resume_path:
+            txt_path = company_dir / f"resume_{safe_company}.txt"
+            if txt_path.exists():
+                resume_path = str(txt_path.relative_to(output_dir))
+        
+        # Cover letter path
+        cover_letter_path = ""
+        cover_txt = company_dir / f"cover_letter_{safe_company}.txt"
+        if cover_txt.exists():
+            cover_letter_path = str(cover_txt.relative_to(output_dir))
+        
+        # Prepare CSV row
+        row_data = {
+            'Company': application.company,
+            'Title': application.title,
+            'Location': application.location,
+            'Job URL': application.url,
+            'Score': f"{application.score:.2f}",
+            'Status': application.status,
+            'Resume Path': resume_path,
+            'Cover Letter Path': cover_letter_path,
+            'Generated At': application.generated_at or '',
+            'Submitted At': application.submitted_at or '',
+            'Discovered At': application.discovered_at or '',
+            'Error': application.error or ''
+        }
+        
+        # Write header if file doesn't exist
+        file_exists = csv_path.exists()
+        
+        with open(csv_path, 'a', newline='', encoding='utf-8') as csvfile:
+            fieldnames = [
+                'Company', 'Title', 'Location', 'Job URL', 'Score', 'Status',
+                'Resume Path', 'Cover Letter Path', 'Generated At', 'Submitted At',
+                'Discovered At', 'Error'
+            ]
+            writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+            
+            if not file_exists:
+                writer.writeheader()
+            
+            writer.writerow(row_data)
+        
+        logger.debug(f"  Appended to applications_tracker.csv")
     
     def run(self, sources: List[Dict[str, str]]) -> Dict[str, Any]:
         """
