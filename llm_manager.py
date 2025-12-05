@@ -125,6 +125,14 @@ class LLMManager:
         """Generate response from LLM"""
         if not self.client:
             raise Exception("No LLM provider available")
+
+        # Normalize input: allow both raw strings and OpenAI-style message lists
+        if isinstance(messages, str):
+            # Treat plain string as a single user message
+            messages = [{"role": "user", "content": messages}]
+        elif isinstance(messages, dict):
+            # Single dict -> wrap in list
+            messages = [messages]
         
         if self.provider == 'ollama':
             return self._generate_ollama(messages, temperature, max_tokens)
