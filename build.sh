@@ -10,8 +10,8 @@ echo "📦 Upgrading pip..."
 pip install --upgrade pip
 
 # Install dependencies
-echo "📦 Installing dependencies from requirements_render.txt..."
-pip install -r requirements_render.txt
+echo "📦 Installing dependencies from requirements.txt..."
+pip install -r requirements.txt
 
 # If lxml is needed and fails, try installing with binary
 echo "✅ Verifying installations..."
@@ -19,6 +19,7 @@ python -c "import flask; print('✓ Flask installed')"
 python -c "import gunicorn; print('✓ Gunicorn installed')"
 python -c "import requests; print('✓ Requests installed')"
 python -c "import bs4; print('✓ BeautifulSoup4 installed')"
+python -c "import rapidfuzz; print('✓ rapidfuzz installed')" || pip install rapidfuzz
 
 # Verify gunicorn is accessible
 echo "✅ Verifying gunicorn..."

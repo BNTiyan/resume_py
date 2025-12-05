@@ -1,16 +1,32 @@
+# Core web framework (needed for web_app.py)
+flask==3.0.0
+flask-cors==4.0.0
+gunicorn==21.2.0
+
+# HTTP & scraping
 python-docx==1.1.2
 rapidfuzz==3.10.1
 requests==2.32.3
+beautifulsoup4==4.12.2
+html5lib==1.1
+
+# Data & documents
 PyYAML==6.0.2
-selenium==4.26.1
-webdriver-manager==4.0.2
+reportlab==4.2.5
+
+# LLM APIs
 openai==2.7.1
+google-generativeai==0.6.0
+
+# Optional dependencies
 langchain-openai==0.3.35
 langchain-core==0.3.79
 langchain-community==0.3.27
 langchain-text-splitters==0.3.11
-faiss-cpu>=1.9.0.post1
 python-dotenv==1.0.1
-reportlab==4.2.5
-playwright==1.55.0
-google-generativeai==0.6.0
+
+# Heavy dependencies (optional for web app)
+# selenium==4.26.1
+# webdriver-manager==4.0.2
+# playwright==1.55.0
+# faiss-cpu>=1.9.0.post1

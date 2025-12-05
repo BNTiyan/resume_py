@@ -75,17 +75,41 @@ Job Description: {job_description}
 3. **WORK EXPERIENCE Section:**
    Section header: "WORK EXPERIENCE" or "PROFESSIONAL EXPERIENCE"
    
+   **⚠️ CRITICAL - YOU MUST INCLUDE ALL 5 COMPANIES:**
+   1. Rivian Automotive, LLC
+   2. Robert Bosch, Michigan  
+   3. Continental Automotive India Private Limited
+   4. Teradata India Private Limited
+   5. Tata Consultancy Services
+   
    **CRITICAL FORMATTING REQUIREMENTS:**
-   - You MUST include ALL positions from the candidate's background (up to 5 positions)
-   - Each position MUST follow this EXACT format with NO variations:
+   - You MUST include ALL 5 positions listed above - NO EXCEPTIONS
+   - DO NOT skip any company even if you think it's less relevant
+   - Each position MUST follow this EXACT TWO-LINE HEADER FORMAT with NO variations:
    ```
    Position Title | Company Name
    Month Year – Month Year | Location
-   • Achievement with quantifiable result (e.g., "Reduced costs by 40% ($500K annually)")
-   • Achievement with quantifiable result
-   • Achievement with quantifiable result
-   • Achievement with quantifiable result
    ```
+   
+   **HEADER FORMAT RULES (CRITICAL):**
+   - Line 1: Position ONLY on the same line as Company (separated by " | ")
+   - Line 2: Dates AND Location on the SAME line (separated by " | ")
+   - DO NOT put dates on a separate line from location
+   - DO NOT put location on a separate line from dates
+   - Example CORRECT format:
+     ```
+     Cybersecurity AI Analyst | Rivian Automotive, LLC
+     May 2025 – Present | Remote, USA
+     • Achievement 1
+     • Achievement 2
+     ```
+   - Example WRONG format (DO NOT USE):
+     ```
+     Cybersecurity AI Analyst | Rivian Automotive, LLC
+     May 2025 – Present
+     Remote, USA
+     • Achievement 1
+     ```
    
    **MANDATORY RULES:**
    - ALWAYS include the company name after the position title, separated by " | "
@@ -208,28 +232,51 @@ PROFESSIONAL SUMMARY
 
 WORK EXPERIENCE
 
-Position Title | Company Name
-Month Year – Month Year | Location
-• Highlight 1 with techincal details
-• Highlight 2 with techincal details
-• Highlight 3 with techincal details
-• Highlight 4 with techincal details
-• Achievement 1 with quantifiable results
-• Achievement 2 with quantifiable results
-• Achievement 3 with quantifiable results
+Cybersecurity AI Analyst | Rivian Automotive, LLC
+May 2025 – Present | Remote, USA
+• Developed cloud-based threat detection using Python, TensorFlow, and AWS Lambda
+• Implemented ML-based anomaly detection reducing security incidents by 40%
+• Built automated vulnerability scanning integrated with GitLab CI/CD pipelines
+• Led security compliance initiatives for ISO 27001 and SOC 2 Type II certifications
+• Architected zero-trust network security framework using Terraform and Kubernetes
+• Reduced false positive alerts by 55% through ML model optimization
+• Mentored team of 3 junior engineers on secure coding practices
 
+Product Owner – Python Engineer | System Safety Engineer & Software Integrator | Robert Bosch, Michigan
+August 2023 – April 2025 | Michigan, USA
+• Developed resilient cloud-native services using Azure, Docker, Kubernetes, and Terraform
+• Built Django REST APIs integrated with ML models for real-time diagnostics and analytics
+• Automated CI/CD pipelines with Azure Pipelines reducing deployment time by 70%
+• Designed PR Statistics Dashboard scaling to 1K requests/sec with AWS SageMaker
+• Implemented observability, logging, and automated alerts across distributed microservices
+• Reduced PR review times by 60% (5 days to 2 days) through ML-powered predictions
+• Coordinated ISO 26262 and ASPICE compliance reviews with cross-functional teams
 
-Position Title | Company Name
-Month Year – Month Year | Location
-• Highlight 1 with techincal details
-• Highlight 2 with techincal details
-• Highlight 3 with techincal details
-• Highlight 4 with techincal details
-• Achievement 1 with quantifiable results
-• Achievement 2 with quantifiable results
-• Achievement 3 with quantifiable results
+Scrum Master – ADAS Camera Object Detection, Tool Architect & Developer | Continental Automotive India Private Limited
+May 2019 – July 2023 | Bangalore, India
+• Led agile teams developing camera object detection systems for emergency braking
+• Architected AUTOSIM prototype reducing manual testing effort by 70%
+• Developed TM_KPI_PORTAL dashboard automating KPI reporting for 50+ engineers
+• Implemented 2D to 3D box mapping improving object detection accuracy by 25%
+• Built Python automation tools processing 10K+ test cases daily
+• Managed sprint planning and retrospectives for distributed team of 15 engineers
+• Improved deployment reliability by 40% through automated validation frameworks
 
-[Repeat for ALL positions - include ALL 5 companies from candidate's background]
+Python Developer and Data Analyst | Teradata India Private Limited
+August 2018 – April 2019 | Hyderabad, India
+• Developed ETL pipelines using Python and SQL processing 500GB+ daily data volumes
+• Built data visualization dashboards using Plotly and Dash for executive reporting
+• Optimized SQL queries reducing data processing time by 50%
+• Automated data quality checks catching 95% of anomalies before production
+
+Senior Software Engineer | Tata Consultancy Services
+June 2014 – July 2018 | Hyderabad, India
+• Developed full-stack applications using Java, JavaScript, and MySQL
+• Built RESTful APIs serving 10K+ daily users with 99.9% uptime
+• Implemented automated testing frameworks reducing bug count by 60%
+• Led code reviews and mentored 5 junior developers on best practices
+
+[⚠️ REMEMBER: ALL 5 COMPANIES MUST BE INCLUDED IN EVERY RESUME]
 
 EDUCATION
 
@@ -277,15 +324,36 @@ PUBLICATIONS
   * Line 4: GitHub URL (FULL URL starting with https://)
   * Line 5: LinkedIn URL (FULL URL starting with https://)
   * Each contact detail on its OWN SEPARATE LINE
+- **ALL 5 COMPANIES ARE MANDATORY** - You MUST include EVERY company:
+  1. Rivian Automotive, LLC (most recent)
+  2. Robert Bosch, Michigan
+  3. Continental Automotive India Private Limited
+  4. Teradata India Private Limited
+  5. Tata Consultancy Services (oldest)
 - NO generic placeholders like "Company" or "Position" - ALWAYS use REAL names from candidate's background
 - COMPANY NAMES ARE MANDATORY - every position MUST include the company name after the position title
 - If position title contains "|", format as: "Position Part 1 | Position Part 2 | Company Name" (company is LAST)
 - EXACTLY 15 bullet points in Professional Summary (each with 2-3 technical terms)
-- Include ALL 5 work positions with company names
+- Include ALL 5 work positions with company names - DO NOT SKIP ANY
+- Each position must have 7-10 bullet points (minimum 7)
 - EVERY achievement must include numbers/metrics
 - Focus on relevance to the target job
 - Dates format: "Month Year – Month Year" or "Month Year – Present"
 - Location format: "City, State/Country" or "Remote, Country"
+
+**⚠️ FINAL REMINDER BEFORE YOU START:**
+1. Generate the HEADER first (5 separate lines for contact info)
+2. Generate PROFESSIONAL SUMMARY with EXACTLY 15 bullets
+3. Generate WORK EXPERIENCE with ALL 5 COMPANIES in order:
+   - Rivian Automotive, LLC (first)
+   - Robert Bosch, Michigan (second)
+   - Continental Automotive India Private Limited (third)
+   - Teradata India Private Limited (fourth)
+   - Tata Consultancy Services (fifth/last)
+4. Each company MUST have 2 lines: "Position | Company" then "Dates | Location"
+5. Then generate EDUCATION, TECHNICAL SKILLS, FUNCTIONAL EXPERTISE, KEY ACHIEVEMENTS, PUBLICATIONS
+
+DO NOT STOP AFTER 2-3 COMPANIES. INCLUDE ALL 5.
 """
 
 ENHANCED_COVER_LETTER_PROMPT = """
