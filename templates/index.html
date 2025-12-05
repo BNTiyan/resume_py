@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quick Apply - Resume & Cover Letter Generator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            text-align: center;
+            color: white;
+            margin-bottom: 40px;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            margin-bottom: 20px;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            cursor: pointer;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+            font-weight: bold;
+        }
+
+        .tab:hover {
+            color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #333;
+        }
+
+        input[type="text"],
+        input[type="url"],
+        textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus,
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            width: 100%;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 40px;
+        }
+
+        .loading.active {
+            display: block;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+        }
+
+        .results.active {
+            display: block;
+        }
+
+        .match-score {
+            text-align: center;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 12px;
+            margin-bottom: 30px;
+        }
+
+        .match-score .score {
+            font-size: 4em;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+
+        .match-score .label {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .job-info {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+        }
+
+        .job-info h3 {
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .job-info p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .downloads {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .download-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .download-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+
+        .download-card h4 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .download-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            background: #667eea;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: background 0.3s;
+        }
+
+        .download-btn:hover {
+            background: #5568d3;
+        }
+
+        .preview-btn {
+            background: #28a745;
+        }
+
+        .preview-btn:hover {
+            background: #218838;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        .alert.active {
+            display: block;
+        }
+
+        .alert-error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .alert-success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .new-application {
+            text-align: center;
+            margin-top: 30px;
+        }
+
+        .new-application button {
+            background: #28a745;
+        }
+
+        .new-application button:hover {
+            background: #218838;
+        }
+
+        .footer {
+            text-align: center;
+            color: white;
+            margin-top: 40px;
+            opacity: 0.8;
+        }
+
+        @media (max-width: 768px) {
+            .row, .downloads {
+                grid-template-columns: 1fr;
+            }
+
+            .header h1 {
+                font-size: 2em;
+            }
+
+            .card {
+                padding: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚀 Quick Apply</h1>
+            <p>Generate Tailored Resume & Cover Letter in Seconds</p>
+        </div>
+
+        <div class="card">
+            <div class="alert alert-error" id="errorAlert"></div>
+
+            <!-- Input Form -->
+            <div id="inputForm">
+                <div class="tabs">
+                    <button class="tab active" onclick="switchTab('url')">From Job Link</button>
+                    <button class="tab" onclick="switchTab('description')">From Description</button>
+                </div>
+
+                <!-- URL Tab -->
+                <div class="tab-content active" id="urlTab">
+                    <form onsubmit="generateFromUrl(event)">
+                        <div class="form-group">
+                            <label for="jobLink">Job Posting URL</label>
+                            <input 
+                                type="url" 
+                                id="jobLink" 
+                                placeholder="https://boards.greenhouse.io/company/jobs/12345"
+                                required
+                            >
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                Supports Greenhouse, Lever, LinkedIn, Google Careers, and more
+                            </small>
+                        </div>
+
+                        <div class="row">
+                            <div class="form-group">
+                                <label for="companyUrl">Company Name (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    id="companyUrl" 
+                                    placeholder="Auto-detected if empty"
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="titleUrl">Job Title (Optional)</label>
+                                <input 
+                                    type="text" 
+                                    id="titleUrl" 
+                                    placeholder="Auto-detected if empty"
+                                >
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn" id="urlSubmitBtn">
+                            Generate Resume & Cover Letter
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Description Tab -->
+                <div class="tab-content" id="descriptionTab">
+                    <form onsubmit="generateFromDescription(event)">
+                        <div class="form-group">
+                            <label for="jobDescription">Job Description</label>
+                            <textarea 
+                                id="jobDescription" 
+                                placeholder="Paste the full job description here..."
+                                required
+                            ></textarea>
+                        </div>
+
+                        <div class="row">
+                            <div class="form-group">
+                                <label for="companyDesc">Company Name</label>
+                                <input 
+                                    type="text" 
+                                    id="companyDesc" 
+                                    placeholder="e.g., Google"
+                                    required
+                                >
+                            </div>
+                            <div class="form-group">
+                                <label for="titleDesc">Job Title</label>
+                                <input 
+                                    type="text" 
+                                    id="titleDesc" 
+                                    placeholder="e.g., ML Engineer"
+                                    required
+                                >
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn" id="descSubmitBtn">
+                            Generate Resume & Cover Letter
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- Loading State -->
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <h3>Generating Your Documents...</h3>
+                <p>This may take 30-60 seconds. Please wait.</p>
+            </div>
+
+            <!-- Results -->
+            <div class="results" id="results">
+                <div class="match-score">
+                    <div class="label">Match Score</div>
+                    <div class="score" id="matchScore">--</div>
+                    <div class="label" id="matchLabel">--</div>
+                </div>
+
+                <div class="job-info">
+                    <h3>📌 Job Details</h3>
+                    <p><strong>Company:</strong> <span id="resultCompany">--</span></p>
+                    <p><strong>Position:</strong> <span id="resultTitle">--</span></p>
+                </div>
+
+                <h3 style="margin-bottom: 20px;">📄 Download Your Documents</h3>
+
+                <div class="downloads">
+                    <div class="download-card">
+                        <h4>📄 Resume</h4>
+                        <a href="#" id="resumePdfLink" class="download-btn" target="_blank">Download PDF</a>
+                        <a href="#" id="resumeDocxLink" class="download-btn" target="_blank">Download DOCX</a>
+                        <br>
+                        <a href="#" id="resumePreviewLink" class="download-btn preview-btn" target="_blank">Preview PDF</a>
+                    </div>
+
+                    <div class="download-card">
+                        <h4>💌 Cover Letter</h4>
+                        <a href="#" id="coverPdfLink" class="download-btn" target="_blank">Download PDF</a>
+                        <a href="#" id="coverDocxLink" class="download-btn" target="_blank">Download DOCX</a>
+                        <br>
+                        <a href="#" id="coverPreviewLink" class="download-btn preview-btn" target="_blank">Preview PDF</a>
+                    </div>
+                </div>
+
+                <div class="new-application">
+                    <button class="btn" onclick="resetForm()">
+                        Create New Application
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <p>Made with ❤️ for job seekers | Powered by AI</p>
+        </div>
+    </div>
+
+    <script>
+        function switchTab(tab) {
+            // Switch tab buttons
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+
+            // Switch tab content
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            if (tab === 'url') {
+                document.getElementById('urlTab').classList.add('active');
+            } else {
+                document.getElementById('descriptionTab').classList.add('active');
+            }
+        }
+
+        function showLoading() {
+            document.getElementById('inputForm').style.display = 'none';
+            document.getElementById('loading').classList.add('active');
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('errorAlert').classList.remove('active');
+        }
+
+        function hideLoading() {
+            document.getElementById('loading').classList.remove('active');
+        }
+
+        function showError(message) {
+            hideLoading();
+            document.getElementById('inputForm').style.display = 'block';
+            document.getElementById('errorAlert').textContent = message;
+            document.getElementById('errorAlert').classList.add('active');
+        }
+
+        function showResults(data) {
+            hideLoading();
+            document.getElementById('results').classList.add('active');
+
+            // Update match score
+            const score = data.match_score;
+            document.getElementById('matchScore').textContent = score + '%';
+            
+            let label = '';
+            if (score >= 70) {
+                label = '🟢 Excellent Match!';
+            } else if (score >= 50) {
+                label = '🟡 Good Match';
+            } else if (score >= 30) {
+                label = '🟠 Moderate Match';
+            } else {
+                label = '🔴 Weak Match';
+            }
+            document.getElementById('matchLabel').textContent = label;
+
+            // Update job info
+            document.getElementById('resultCompany').textContent = data.company;
+            document.getElementById('resultTitle').textContent = data.title;
+
+            // Update download links
+            document.getElementById('resumePdfLink').href = '/api/download/' + data.files.resume_pdf;
+            document.getElementById('resumeDocxLink').href = '/api/download/' + data.files.resume_docx;
+            document.getElementById('resumePreviewLink').href = '/api/preview/' + data.files.resume_pdf;
+            
+            document.getElementById('coverPdfLink').href = '/api/download/' + data.files.cover_letter_pdf;
+            document.getElementById('coverDocxLink').href = '/api/download/' + data.files.cover_letter_docx;
+            document.getElementById('coverPreviewLink').href = '/api/preview/' + data.files.cover_letter_pdf;
+        }
+
+        function resetForm() {
+            document.getElementById('results').classList.remove('active');
+            document.getElementById('inputForm').style.display = 'block';
+            document.getElementById('errorAlert').classList.remove('active');
+            
+            // Clear form inputs
+            document.getElementById('jobLink').value = '';
+            document.getElementById('companyUrl').value = '';
+            document.getElementById('titleUrl').value = '';
+            document.getElementById('jobDescription').value = '';
+            document.getElementById('companyDesc').value = '';
+            document.getElementById('titleDesc').value = '';
+        }
+
+        async function generateFromUrl(event) {
+            event.preventDefault();
+            showLoading();
+
+            const jobLink = document.getElementById('jobLink').value;
+            const company = document.getElementById('companyUrl').value;
+            const title = document.getElementById('titleUrl').value;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        job_link: jobLink,
+                        company: company,
+                        title: title
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showResults(data);
+                } else {
+                    showError(data.error || 'Failed to generate documents');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        async function generateFromDescription(event) {
+            event.preventDefault();
+            showLoading();
+
+            const jobDescription = document.getElementById('jobDescription').value;
+            const company = document.getElementById('companyDesc').value;
+            const title = document.getElementById('titleDesc').value;
+
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        job_description: jobDescription,
+                        company: company,
+                        title: title
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    showResults(data);
+                } else {
+                    showError(data.error || 'Failed to generate documents');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            }
+        }
+
+        // Check health on load
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/api/health');
+                const data = await response.json();
+                console.log('Health check:', data);
+            } catch (error) {
+                console.error('Health check failed:', error);
+            }
+        });
+    </script>
+</body>
+</html>
+
