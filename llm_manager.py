@@ -11,7 +11,14 @@ LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'auto')  # 'auto', 'gemini', 'ollama', 
 ENABLE_OPENAI = os.getenv('ENABLE_OPENAI', 'false').lower() == 'true'  # OpenAI disabled by default
 
 class LLMManager:
-    def __init__(self):
+    def __init__(self, config=None):
+        """
+        Optional config argument is accepted for backward compatibility with
+        callers that pass a config object. Currently, provider selection is
+        driven by environment variables, but we keep the config reference
+        in case we want to read LLM-related settings from it in the future.
+        """
+        self.config = config or {}
         self.provider = None
         self.client = None
         self._initialize()
