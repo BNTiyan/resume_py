@@ -22,7 +22,7 @@ import re
 from match import (
     fetch_job_description_from_url,
     score_job,
-    load_resume_yaml_data
+    load_resume_data
 )
 from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
 from pdf_generator import PDFGenerator
@@ -394,7 +394,7 @@ Examples:
         print(f"❌ Resume file not found: {args.resume}")
         sys.exit(1)
     
-    resume_text, resume_data = load_resume_yaml_data(resume_path)
+    resume_text, resume_data = load_resume_data(resume_path)
     if not resume_data:
         print("❌ Failed to load resume data")
         sys.exit(1)
