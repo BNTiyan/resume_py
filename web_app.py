@@ -17,7 +17,7 @@ import traceback
 # Import existing modules
 from match import (
     fetch_job_description_from_url,
-    compute_match_score,
+    score_job,
     load_resume_yaml_data
 )
 from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
@@ -161,7 +161,13 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         )
         
         # Calculate match score
-        match_score = compute_match_score(tailored_resume, job_description)
+        job_dict = {
+            'title': job_title,
+            'company': company_name,
+            'location': '',
+            'description': job_description
+        }
+        match_score = score_job(job_dict, tailored_resume)
         
         return {
             'success': True,

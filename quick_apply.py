@@ -21,7 +21,7 @@ import re
 # Import existing modules
 from match import (
     fetch_job_description_from_url,
-    compute_match_score,
+    score_job,
     load_resume_yaml_data
 )
 from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
@@ -268,12 +268,18 @@ def generate_resume_and_cover_letter(
     return str(resume_pdf_path), str(cover_letter_pdf_path), tailored_resume
 
 
-def calculate_match_score(resume_text: str, job_description: str) -> float:
+def calculate_match_score(resume_text: str, job_description: str, company_name: str, job_title: str) -> float:
     """Calculate match score between resume and job description"""
     print("\n📊 Calculating match score...")
     
-    # Use the existing compute_match_score function
-    score = compute_match_score(resume_text, job_description)
+    # Create job dict for score_job function
+    job_dict = {
+        'title': job_title,
+        'company': company_name,
+        'location': '',
+        'description': job_description
+    }
+    score = score_job(job_dict, resume_text)
     
     return score
 
@@ -433,7 +439,7 @@ Examples:
     )
     
     # Calculate match score
-    match_score = calculate_match_score(tailored_resume, job_description)
+    match_score = calculate_match_score(tailored_resume, job_description, company_name, job_title)
     
     # Print summary
     print_summary(
