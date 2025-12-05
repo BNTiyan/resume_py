@@ -120,7 +120,7 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         )
         
         print("  📄 Generating resume...")
-        tailored_resume = llm_manager.generate(resume_prompt, max_tokens=3000)
+        tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
         if not tailored_resume:
             return None, "Failed to generate resume content"
         

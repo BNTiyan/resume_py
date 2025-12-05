@@ -117,7 +117,7 @@ def tailor_resume_for_job(
             model=model,
             messages=[{"role": "system", "content": system}, {"role": "user", "content": user}],
             temperature=0.5,
-            max_tokens=1500,
+            max_tokens=6000,
         )
         return (resp.choices[0].message.content or "").strip()
     except Exception as e:

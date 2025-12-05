@@ -186,7 +186,7 @@ def generate_resume_and_cover_letter(
     )
     
     print("  📄 Generating resume content...")
-    tailored_resume = llm_manager.generate(resume_prompt, max_tokens=3000)
+    tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
     
     if not tailored_resume:
         print("❌ Failed to generate resume")

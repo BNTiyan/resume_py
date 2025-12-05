@@ -114,7 +114,7 @@ class LLMManager:
                 print("  Get key: https://platform.openai.com/api-keys")
         return False
     
-    def generate(self, messages, temperature=0.7, max_tokens=2000):
+    def generate(self, messages, temperature=0.7, max_tokens=6000):
         """Generate response from LLM"""
         if not self.client:
             raise Exception("No LLM provider available")
