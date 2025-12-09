@@ -70,8 +70,8 @@ class LLMManager:
             api_key = os.getenv('GEMINI_API_KEY')
             if api_key:
                 genai.configure(api_key=api_key)
-                # Use latest stable Gemini model; allow override via GEMINI_MODEL
-                model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-latest')
+                # Use Gemini 2.0 Flash by default; allow override via GEMINI_MODEL
+                model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
                 model = genai.GenerativeModel(model_name)
                 self.client = model
                 self.provider = 'gemini'
