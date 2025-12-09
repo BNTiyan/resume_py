@@ -379,6 +379,18 @@
                             </div>
                         </div>
 
+                        <div class="form-group">
+                            <label for="resumeFileUrl">Upload Your Current Resume (optional)</label>
+                            <input 
+                                type="file" 
+                                id="resumeFileUrl" 
+                                accept=".pdf,.docx"
+                            >
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                If provided, we will use this resume as the base for scoring and tailoring.
+                            </small>
+                        </div>
+
                         <button type="submit" class="btn" id="urlSubmitBtn">
                             Generate Resume & Cover Letter
                         </button>
@@ -416,6 +428,18 @@
                                     required
                                 >
                             </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="resumeFileDesc">Upload Your Current Resume (optional)</label>
+                            <input 
+                                type="file" 
+                                id="resumeFileDesc" 
+                                accept=".pdf,.docx"
+                            >
+                            <small style="color: #666; display: block; margin-top: 5px;">
+                                If provided, we will use this resume as the base for scoring and tailoring.
+                            </small>
                         </div>
 
                         <button type="submit" class="btn" id="descSubmitBtn">
@@ -558,6 +582,10 @@
             document.getElementById('jobDescription').value = '';
             document.getElementById('companyDesc').value = '';
             document.getElementById('titleDesc').value = '';
+            const f1 = document.getElementById('resumeFileUrl');
+            const f2 = document.getElementById('resumeFileDesc');
+            if (f1) f1.value = '';
+            if (f2) f2.value = '';
         }
 
         async function generateFromUrl(event) {
@@ -567,19 +595,35 @@
             const jobLink = document.getElementById('jobLink').value;
             const company = document.getElementById('companyUrl').value;
             const title = document.getElementById('titleUrl').value;
+            const fileInput = document.getElementById('resumeFileUrl');
+            const resumeFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
 
             try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        job_link: jobLink,
-                        company: company,
-                        title: title
-                    })
-                });
+                let response;
+                if (resumeFile) {
+                    const formData = new FormData();
+                    formData.append('job_link', jobLink);
+                    formData.append('company', company);
+                    formData.append('title', title);
+                    formData.append('resume_file', resumeFile);
+
+                    response = await fetch('/api/generate_with_resume', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            job_link: jobLink,
+                            company: company,
+                            title: title
+                        })
+                    });
+                }
 
                 const data = await response.json();
 
@@ -600,19 +644,35 @@
             const jobDescription = document.getElementById('jobDescription').value;
             const company = document.getElementById('companyDesc').value;
             const title = document.getElementById('titleDesc').value;
+            const fileInput = document.getElementById('resumeFileDesc');
+            const resumeFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
 
             try {
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        job_description: jobDescription,
-                        company: company,
-                        title: title
-                    })
-                });
+                let response;
+                if (resumeFile) {
+                    const formData = new FormData();
+                    formData.append('job_description', jobDescription);
+                    formData.append('company', company);
+                    formData.append('title', title);
+                    formData.append('resume_file', resumeFile);
+
+                    response = await fetch('/api/generate_with_resume', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            job_description: jobDescription,
+                            company: company,
+                            title: title
+                        })
+                    });
+                }
 
                 const data = await response.json();
 
