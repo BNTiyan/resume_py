@@ -25,7 +25,10 @@ from pdf_generator import PDFGenerator
 from docx_generator import WordDocumentGenerator
 from llm_manager import LLMManager
 from resume_utils import render_resume_from_yaml
+from resume_parser import parse_resume_file
 import re
+from docx import Document as DocxDocument
+from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 CORS(app)
@@ -81,11 +84,103 @@ def extract_job_info_from_url(url: str):
     return company, title
 
 
-def generate_documents(job_description, company_name, job_title, resume_data, config):
+def build_relevant_skills_section(resume_data, job_description: str) -> str:
+    """
+    Heuristic, non-LLM booster:
+    - Find overlap between your YAML skills and the job description.
+    - Add a short 'Relevant Skills for This Role' section that paraphrases
+      those overlaps so the text is closer to the JD and boosts score_job.
+    """
+    if not resume_data or not job_description:
+        return ""
+
+    jd_lower = job_description.lower()
+
+    # Collect candidate skills from structured YAML
+    overlaps: list[str] = []
+    seen: set[str] = set()
+
+    for group in resume_data.get("skills", []) or []:
+        for kw in group.get("keywords", []) or []:
+            skill = str(kw).strip()
+            if not skill:
+                continue
+            key = skill.lower()
+            if key in seen:
+                continue
+            # Simple containment check
+            if key in jd_lower:
+                overlaps.append(skill)
+                seen.add(key)
+
+    if not overlaps:
+        return ""
+
+    # Limit to a reasonable number to keep section compact
+    overlaps = overlaps[:12]
+
+    lines: list[str] = []
+    lines.append("RELEVANT SKILLS FOR THIS ROLE")
+    lines.append("")
+    lines.append("The following skills from my background align directly with this position:")
+
+    # Group skills into small clusters and paraphrase slightly
+    chunk_size = 4
+    for i in range(0, len(overlaps), chunk_size):
+        chunk = overlaps[i : i + chunk_size]
+        if not chunk:
+            continue
+        if len(chunk) == 1:
+            skills_phrase = chunk[0]
+        elif len(chunk) == 2:
+            skills_phrase = f"{chunk[0]} and {chunk[1]}"
+        else:
+            skills_phrase = ", ".join(chunk[:-1]) + f", and {chunk[-1]}"
+
+        lines.append(f"- Hands-on experience with {skills_phrase}, which is explicitly called out in the job description.")
+
+    lines.append("- Proven track record applying these skills in production environments, as detailed in the work experience above.")
+
+    return "\n".join(lines).strip()
+
+
+def extract_text_from_resume_file(file_path: Path) -> str:
+    """Extract plain text from an uploaded resume (PDF or DOCX)."""
+    suffix = file_path.suffix.lower()
+    if suffix == ".pdf":
+        try:
+            reader = PdfReader(str(file_path))
+            texts = []
+            for page in reader.pages:
+                try:
+                    texts.append(page.extract_text() or "")
+                except Exception:
+                    continue
+            return "\n".join(texts).strip()
+        except Exception as e:
+            print(f"[upload] Failed to extract text from PDF: {e}")
+            return ""
+    elif suffix in (".docx",):
+        try:
+            doc = DocxDocument(str(file_path))
+            return "\n".join([p.text for p in doc.paragraphs]).strip()
+        except Exception as e:
+            print(f"[upload] Failed to extract text from DOCX: {e}")
+            return ""
+    else:
+        print(f"[upload] Unsupported resume file type: {suffix}")
+        return ""
+
+
+def generate_documents(job_description, company_name, job_title, resume_data, config, base_resume_text: str | None = None):
     """Generate resume and cover letter"""
     try:
-        # Convert resume to text (base content)
-        resume_text = render_resume_from_yaml(resume_data)
+        # Convert resume to text (base content). If a user-uploaded resume
+        # was provided, prefer that text as the base; otherwise use YAML.
+        if base_resume_text and base_resume_text.strip():
+            resume_text = base_resume_text.strip()
+        else:
+            resume_text = render_resume_from_yaml(resume_data)
 
         tailored_resume = None
         cover_letter = None
@@ -128,7 +223,14 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
                 "Sincerely,\n"
                 f"{resume_data.get('basics', {}).get('name', '')}"
             )
-        
+        # Heuristic, non-LLM booster: append a "Relevant Skills" section based
+        # on overlaps between your YAML skills and the job description.
+        relevant_section = build_relevant_skills_section(resume_data, job_description)
+        if relevant_section:
+            enhanced_resume = tailored_resume.rstrip() + "\n\n" + relevant_section
+        else:
+            enhanced_resume = tailored_resume
+
         # Generate files
         pdf_gen = PDFGenerator()
         docx_gen = WordDocumentGenerator()
@@ -149,30 +251,40 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         cover_docx = output_dir / f"{base_name}_cover_letter.docx"
         
         # Generate PDFs and DOCX files
-        candidate_name = resume_data.get("basics", {}).get("name", "")
+        basics = resume_data.get("basics", {}) or {}
+        candidate_name = basics.get("name", "")
+        candidate_email = basics.get("email", "")
+        candidate_phone = basics.get("phone", "")
         
         pdf_gen.generate_resume_pdf(
-            tailored_resume, str(resume_pdf),
+            enhanced_resume, str(resume_pdf),
             job_title=job_title, company_name=company_name,
             candidate_name=candidate_name, structured=resume_data
         )
         
         docx_gen.generate_resume_docx(
-            tailored_resume, str(resume_docx),
+            enhanced_resume, str(resume_docx),
             job_title=job_title, company_name=company_name,
             candidate_name=candidate_name, structured=resume_data
         )
         
         pdf_gen.generate_cover_letter_pdf(
             cover_letter, str(cover_pdf),
+            job_title=job_title,
+            company_name=company_name,
             candidate_name=candidate_name,
-            company_name=company_name, job_title=job_title
+            candidate_email=candidate_email,
+            candidate_phone=candidate_phone,
         )
         
         docx_gen.generate_cover_letter_docx(
-            cover_letter, str(cover_docx),
+            cover_letter,
+            str(cover_docx),
+            job_title=job_title,
+            company_name=company_name,
             candidate_name=candidate_name,
-            company_name=company_name, job_title=job_title
+            candidate_email=candidate_email,
+            candidate_phone=candidate_phone,
         )
         
         # Calculate match score
@@ -182,7 +294,7 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
             'location': '',
             'description': job_description
         }
-        match_score = score_job(job_dict, tailored_resume)
+        match_score = score_job(job_dict, enhanced_resume)
         
         return {
             'success': True,
@@ -219,7 +331,8 @@ def health_check():
             'gemini': config.get('gemini', {}).get('enabled', False) if config else False,
             'openai': config.get('openai', {}).get('enabled', False) if config else False,
             'ollama': config.get('ollama', {}).get('enabled', False) if config else False
-        }
+        },
+        'parser_enabled': True
     })
 
 
@@ -249,7 +362,7 @@ def generate():
                 'error': 'Configuration not found (config.json)'
             }), 500
         
-        # Load resume
+        # Load base resume from YAML
         resume_path = Path("input/resume.yml")
         if not resume_path.exists():
             return jsonify({
@@ -257,7 +370,7 @@ def generate():
                 'error': 'Resume file not found (input/resume.yml)'
             }), 500
         
-        resume_text, resume_data = load_resume_data(resume_path)
+        _, resume_data = load_resume_data(resume_path)
         if not resume_data:
             return jsonify({
                 'success': False,
@@ -287,10 +400,13 @@ def generate():
         if not job_title:
             job_title = "Position"
         
-        # Generate documents
+        # Generate documents (using YAML-based resume as base)
         result, error = generate_documents(
-            job_description, company_name, job_title,
-            resume_data, config
+            job_description=job_description,
+            company_name=company_name,
+            job_title=job_title,
+            resume_data=resume_data,
+            config=config
         )
         
         if error:
@@ -305,6 +421,150 @@ def generate():
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
+        }), 500
+
+
+@app.route('/api/generate_with_resume', methods=['POST'])
+def generate_with_resume():
+    """Generate resume & cover letter using an uploaded resume (PDF/DOCX) as base."""
+    try:
+        # Text fields from form-data
+        job_link = (request.form.get('job_link') or "").strip()
+        job_description = (request.form.get('job_description') or "").strip()
+        company_name = (request.form.get('company') or "").strip()
+        job_title = (request.form.get('title') or "").strip()
+
+        resume_file = request.files.get('resume_file')
+
+        if not resume_file or resume_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'Resume file is required when using this option'
+            }), 400
+
+        if not job_link and not job_description:
+            return jsonify({
+                'success': False,
+                'error': 'Either job_link or job_description is required'
+            }), 400
+
+        # Load configuration
+        config = load_config()
+        if not config:
+            return jsonify({
+                'success': False,
+                'error': 'Configuration not found (config.json)'
+            }), 500
+
+        # Load YAML resume for structured data (name, sections, etc.)
+        resume_path = Path("input/resume.yml")
+        if not resume_path.exists():
+            return jsonify({
+                'success': False,
+                'error': 'Resume file not found (input/resume.yml)'
+            }), 500
+
+        _, resume_data = load_resume_data(resume_path)
+        if not resume_data:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to load resume data'
+            }), 500
+
+        # Save uploaded resume to disk
+        upload_dir = Path(app.config['UPLOAD_FOLDER'])
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', resume_file.filename)
+        saved_path = upload_dir / f"{timestamp}_{safe_name}"
+        resume_file.save(str(saved_path))
+
+        # Extract text from uploaded resume using shared parser util
+        parsed = parse_resume_file(saved_path)
+        base_resume_text = extract_text_from_resume_file(saved_path)
+        if not base_resume_text:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to read text from uploaded resume (only PDF and DOCX are supported)'
+            }), 400
+
+        # If URL provided but no JD text, fetch it
+        if job_link and not job_description:
+            jd = fetch_job_description_from_url(job_link)
+            if not jd:
+                return jsonify({
+                    'success': False,
+                    'error': 'Could not fetch job description from the provided URL'
+                }), 400
+            job_description = jd
+
+        # Auto-extract company/title from URL when missing
+        if job_link:
+            auto_company, auto_title = extract_job_info_from_url(job_link)
+            if not company_name and auto_company:
+                company_name = auto_company
+            if not job_title and auto_title:
+                job_title = auto_title
+
+        if not company_name:
+            company_name = "Company"
+        if not job_title:
+            job_title = "Position"
+
+        # Generate documents using uploaded resume text as base
+        result, error = generate_documents(
+            job_description=job_description,
+            company_name=company_name,
+            job_title=job_title,
+            resume_data=resume_data,
+            config=config,
+            base_resume_text=base_resume_text
+        )
+
+        if error or not result:
+            return jsonify({
+                'success': False,
+                'error': error or 'Failed to generate documents'
+            }), 500
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f"Server error: {str(e)}"
+        }), 500
+
+
+@app.route('/api/parse_resume', methods=['POST'])
+def parse_resume_endpoint():
+    """Pure resume parsing endpoint: return structured JSON from uploaded resume."""
+    try:
+        resume_file = request.files.get('resume_file')
+        if not resume_file or resume_file.filename == '':
+            return jsonify({
+                'success': False,
+                'error': 'resume_file is required'
+            }), 400
+
+        upload_dir = Path(app.config['UPLOAD_FOLDER'])
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', resume_file.filename)
+        saved_path = upload_dir / f"{timestamp}_{safe_name}"
+        resume_file.save(str(saved_path))
+
+        parsed = parse_resume_file(saved_path)
+
+        return jsonify({
+            'success': True,
+            'parsed': parsed
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f"Server error: {str(e)}"
         }), 500
 
 

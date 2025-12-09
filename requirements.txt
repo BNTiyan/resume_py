@@ -13,6 +13,7 @@ html5lib==1.1
 # Data & documents
 PyYAML==6.0.2
 reportlab==4.2.5
+PyPDF2==3.0.1
 
 # LLM APIs
 openai==2.7.1
