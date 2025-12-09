@@ -9,7 +9,7 @@ basics:
       url: https://www.linkedin.com/in/bhavana-nare-60657385/
     - network: GitHub
       username: Bhavana5N
-      url: https://github.com/BNTiyan
+      url: https://github.com/Bhavana5N
   summary:
     - Proficient in Python, C++, JavaScript, Django, Flask, React JS, and cloud services across AWS and Azure.
     - Designed scalable RESTful and GraphQL APIs for microservices architecture and real-time data aggregation.
@@ -89,6 +89,7 @@ work:
       - Implemented observability, logging, and automated alerts across distributed microservices.
       - Managed dependency orchestration and YAML-based configuration for scalable deployments.
       - Enhanced API validation and security, ensuring high availability of cloud-native components.
+      - Led development of a PR Statistics Dashboard (Flask + React + AWS SageMaker) to forecast review SLAs, containerized with Docker and scaling to 1K req/sec.
     achievements:
       - Reduced manual validation and testing efforts by 70% through Jenkins and Docker automation.
       - Automated PR creation and dependency management using Azure Pipelines and Conan modules.
