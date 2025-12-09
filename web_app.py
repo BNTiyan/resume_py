@@ -84,19 +84,13 @@ def extract_job_info_from_url(url: str):
     return company, title
 
 
-def build_relevant_skills_section(resume_data, job_description: str) -> str:
-    """
-    Heuristic, non-LLM booster:
-    - Find overlap between your YAML skills and the job description.
-    - Add a short 'Relevant Skills for This Role' section that paraphrases
-      those overlaps so the text is closer to the JD and boosts score_job.
-    """
+def get_overlapping_skills(resume_data, job_description: str) -> list[str]:
+    """Return a list of candidate skills that appear in the job description."""
     if not resume_data or not job_description:
-        return ""
+        return []
 
     jd_lower = job_description.lower()
 
-    # Collect candidate skills from structured YAML
     overlaps: list[str] = []
     seen: set[str] = set()
 
@@ -108,11 +102,21 @@ def build_relevant_skills_section(resume_data, job_description: str) -> str:
             key = skill.lower()
             if key in seen:
                 continue
-            # Simple containment check
             if key in jd_lower:
                 overlaps.append(skill)
                 seen.add(key)
 
+    return overlaps
+
+
+def build_relevant_skills_section(resume_data, job_description: str) -> str:
+    """
+    Heuristic, non-LLM booster:
+    - Find overlap between your YAML skills and the job description.
+    - Add a short 'Relevant Skills for This Role' section that paraphrases
+      those overlaps so the text is closer to the JD and boosts score_job.
+    """
+    overlaps = get_overlapping_skills(resume_data, job_description)
     if not overlaps:
         return ""
 
@@ -142,6 +146,116 @@ def build_relevant_skills_section(resume_data, job_description: str) -> str:
     lines.append("- Proven track record applying these skills in production environments, as detailed in the work experience above.")
 
     return "\n".join(lines).strip()
+
+
+def build_fallback_cover_letter(resume_data, job_title: str, company_name: str, job_description: str) -> str:
+    """
+    Non-LLM cover letter template with 2–3 relevant paragraphs.
+    Uses:
+    - basics.summary from YAML
+    - overlapping skills between resume and JD
+    """
+    basics = resume_data.get("basics", {}) or {}
+    name = basics.get("name", "")
+    summary_list = basics.get("summary", []) or []
+
+    overlaps = get_overlapping_skills(resume_data, job_description)
+    top_skills = overlaps[:4]
+
+    paragraphs: list[str] = []
+
+    # Paragraph 1: interest + role/company
+    p1 = f"I am very interested in the {job_title} role at {company_name} and believe my background is a strong match for your needs."
+    paragraphs.append(p1)
+
+    # Paragraph 2: core profile from summary
+    if summary_list:
+        core_points = " ".join(summary_list[:2])
+        p2 = (
+            "Over my recent roles, I have focused on building reliable, production-ready systems. "
+            f"{core_points}"
+        )
+        paragraphs.append(p2)
+
+    # Paragraph 3: explicit alignment with JD skills
+    if top_skills:
+        if len(top_skills) == 1:
+            skills_phrase = top_skills[0]
+        elif len(top_skills) == 2:
+            skills_phrase = f"{top_skills[0]} and {top_skills[1]}"
+        else:
+            skills_phrase = ", ".join(top_skills[:-1]) + f", and {top_skills[-1]}"
+
+        p3 = (
+            f"For this position, I bring hands-on experience with {skills_phrase}, "
+            "which directly aligns with the technologies and responsibilities highlighted in the job description. "
+            "I have applied these skills in real projects to deliver measurable impact and improve engineering workflows."
+        )
+        paragraphs.append(p3)
+
+    # Final paragraph: closing
+    closing = (
+        "Thank you for your time and consideration. I would welcome the opportunity to discuss how my background "
+        "can help your team deliver high-quality, scalable solutions."
+    )
+    paragraphs.append(closing)
+
+    body = "\n\n".join(paragraphs)
+
+    header = "Dear Hiring Manager,"
+    footer = f"Sincerely,\n{name}" if name else "Sincerely,\n"
+
+    return f"{header}\n\n{body}\n\n{footer}"
+
+
+def build_score_explanation(
+    resume_data,
+    job_description: str,
+    match_score: float,
+    overlapping_skills: list[str],
+) -> str:
+    """
+    Generate a short, human-readable explanation of why the score looks the way it does.
+    This is heuristic and non-LLM, similar to ATS tools that give a brief rationale.
+    """
+    basics = resume_data.get("basics", {}) or {}
+    label = basics.get("label", "") or basics.get("title", "")
+
+    # Overall band
+    if match_score >= 85:
+        overall_phrase = "Your resume shows a very strong alignment with this role"
+    elif match_score >= 70:
+        overall_phrase = "Your resume demonstrates a strong match for this role"
+    elif match_score >= 50:
+        overall_phrase = "Your resume is a moderate match for this role"
+    else:
+        overall_phrase = "Your resume currently has a weaker match for this role"
+
+    # Skills highlight
+    skills_phrase = ""
+    if overlapping_skills:
+        top = overlapping_skills[:4]
+        if len(top) == 1:
+            s = top[0]
+        elif len(top) == 2:
+            s = f"{top[0]} and {top[1]}"
+        else:
+            s = ", ".join(top[:-1]) + f", and {top[-1]}"
+        skills_phrase = f" by emphasizing key skills such as {s}"
+
+    # Simple guidance
+    if match_score >= 80:
+        guidance = " You can push this even higher by adding a few more role-specific keywords and concrete impact metrics from the job description."
+    elif match_score >= 60:
+        guidance = " To strengthen the match, consider adding more of the job's specific tools, domains, and outcome-focused bullet points into your experience and skills sections."
+    else:
+        guidance = " To improve this score, you may need to add missing core skills from the job description and expand relevant experience bullets that directly mirror the role's responsibilities."
+
+    extra = ""
+    if label:
+        extra = f" Your profile as a {label} is reflected in the summary and experience sections, which helps the ATS understand your seniority level."
+
+    return overall_phrase + skills_phrase + "." + extra + guidance
 
 
 def extract_text_from_resume_file(file_path: Path) -> str:
@@ -215,16 +329,15 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
             tailored_resume = resume_text
 
         if not cover_letter:
-            cover_letter = (
-                "Dear Hiring Manager,\n\n"
-                f"I am very interested in the {job_title} role at {company_name}. "
-                "Please find my resume attached, which highlights my experience relevant to this position.\n\n"
-                "Thank you for your time and consideration.\n\n"
-                "Sincerely,\n"
-                f"{resume_data.get('basics', {}).get('name', '')}"
+            cover_letter = build_fallback_cover_letter(
+                resume_data=resume_data,
+                job_title=job_title,
+                company_name=company_name,
+                job_description=job_description,
             )
         # Heuristic, non-LLM booster: append a "Relevant Skills" section based
         # on overlaps between your YAML skills and the job description.
+        overlaps_for_section = get_overlapping_skills(resume_data, job_description)
         relevant_section = build_relevant_skills_section(resume_data, job_description)
         if relevant_section:
             enhanced_resume = tailored_resume.rstrip() + "\n\n" + relevant_section
@@ -295,12 +408,21 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
             'description': job_description
         }
         match_score = score_job(job_dict, enhanced_resume)
+
+        # Build human-readable score explanation
+        score_explanation = build_score_explanation(
+            resume_data=resume_data,
+            job_description=job_description,
+            match_score=match_score,
+            overlapping_skills=overlaps_for_section,
+        )
         
         return {
             'success': True,
             'company': company_name,
             'title': job_title,
             'match_score': round(match_score, 1),
+            'score_explanation': score_explanation,
             'files': {
                 'resume_pdf': str(resume_pdf.relative_to(app.config['OUTPUT_FOLDER'])),
                 'resume_docx': str(resume_docx.relative_to(app.config['OUTPUT_FOLDER'])),

@@ -28,6 +28,7 @@ from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMP
 from pdf_generator import PDFGenerator
 from docx_generator import WordDocumentGenerator
 from llm_manager import LLMManager
+from cover_letter import CoverLetterBuilder
 
 
 def load_config() -> Dict[str, Any]:
@@ -186,13 +187,18 @@ def generate_resume_and_cover_letter(
     )
     
     print("  📄 Generating resume content...")
-    tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+    tailored_resume = None
+    try:
+        tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+    except Exception as e:
+        print(f"  ⚠️ LLM resume generation failed: {e}")
     
     if not tailored_resume:
-        print("❌ Failed to generate resume")
-        sys.exit(1)
+        # Fallback: use base resume text if LLM is unavailable
+        print("  ⚠️ Falling back to base resume text (no LLM tailoring).")
+        tailored_resume = resume_text
     
-    # Generate cover letter using LLM
+    # Generate cover letter using LLM, with deterministic fallback
     cover_letter_prompt = ENHANCED_COVER_LETTER_PROMPT.format(
         company_name=company_name,
         job_title=job_title,
@@ -201,10 +207,21 @@ def generate_resume_and_cover_letter(
     )
     
     print("  💌 Generating cover letter content...")
-    cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+    cover_letter = None
+    try:
+        cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+    except Exception as e:
+        print(f"  ⚠️ LLM cover letter generation failed: {e}")
     
     if not cover_letter:
-        print("❌ Failed to generate cover letter")
+        # Deterministic, non-LLM fallback: reuse existing CoverLetterBuilder logic
+        print("  💌 Falling back to deterministic cover letter builder...")
+        candidate_name = resume_data.get("basics", {}).get("name", "")
+        builder = CoverLetterBuilder(resume_text, candidate_name)
+        cover_letter = builder.compose_concise_text(job_description, company_name, job_title)
+    
+    if not cover_letter:
+        print("❌ Failed to generate cover letter (LLM + fallback)")
         sys.exit(1)
     
     # Generate PDF and DOCX files
@@ -248,21 +265,30 @@ def generate_resume_and_cover_letter(
     cover_letter_docx_path = output_dir / f"{base_name}_cover_letter.docx"
     
     print("  💌 Generating cover letter PDF...")
+    basics = resume_data.get("basics", {}) or {}
+    candidate_name = basics.get("name", "")
+    candidate_email = basics.get("email", "")
+    candidate_phone = basics.get("phone", "")
+
     pdf_gen.generate_cover_letter_pdf(
         cover_letter,
         str(cover_letter_pdf_path),
-        candidate_name=resume_data.get("basics", {}).get("name", ""),
+        job_title=job_title,
         company_name=company_name,
-        job_title=job_title
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        candidate_phone=candidate_phone,
     )
     
     print("  💌 Generating cover letter DOCX...")
     docx_gen.generate_cover_letter_docx(
         cover_letter,
         str(cover_letter_docx_path),
-        candidate_name=resume_data.get("basics", {}).get("name", ""),
+        job_title=job_title,
         company_name=company_name,
-        job_title=job_title
+        candidate_name=candidate_name,
+        candidate_email=candidate_email,
+        candidate_phone=candidate_phone,
     )
     
     return str(resume_pdf_path), str(cover_letter_pdf_path), tailored_resume

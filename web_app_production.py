@@ -40,12 +40,13 @@ try:
     from match import (
         fetch_job_description_from_url,
         score_job,
-        load_resume_data
+        load_resume_data,
     )
     from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
     from pdf_generator import PDFGenerator
     from docx_generator import WordDocumentGenerator
     from llm_manager import LLMManager
+    from cover_letter import CoverLetterBuilder
     from resume_utils import render_resume_from_yaml
     print("✅ All modules imported successfully")
 except ImportError as e:
@@ -120,9 +121,14 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         )
         
         print("  📄 Generating resume...")
-        tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+        tailored_resume = None
+        try:
+            tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+        except Exception as e:
+            print(f"  ⚠️ LLM resume generation failed: {e}")
         if not tailored_resume:
-            return None, "Failed to generate resume content"
+            print("  ⚠️ Falling back to base resume text (no LLM tailoring).")
+            tailored_resume = resume_text
         
         # Generate cover letter
         cover_letter_prompt = ENHANCED_COVER_LETTER_PROMPT.format(
@@ -133,9 +139,20 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         )
         
         print("  💌 Generating cover letter...")
-        cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+        cover_letter = None
+        try:
+            cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+        except Exception as e:
+            print(f"  ⚠️ LLM cover letter generation failed: {e}")
+
         if not cover_letter:
-            return None, "Failed to generate cover letter content"
+            print("  💌 Falling back to deterministic cover letter builder...")
+            candidate_name = resume_data.get("basics", {}).get("name", "")
+            builder = CoverLetterBuilder(resume_text, candidate_name)
+            cover_letter = builder.compose_concise_text(job_description, company_name, job_title)
+
+        if not cover_letter:
+            return None, "Failed to generate cover letter content (LLM + fallback)"
         
         # Generate files
         pdf_gen = PDFGenerator()
@@ -156,7 +173,10 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         cover_pdf = output_dir / f"{base_name}_cover_letter.pdf"
         cover_docx = output_dir / f"{base_name}_cover_letter.docx"
         
-        candidate_name = resume_data.get("basics", {}).get("name", "")
+        basics = resume_data.get("basics", {}) or {}
+        candidate_name = basics.get("name", "")
+        candidate_email = basics.get("email", "")
+        candidate_phone = basics.get("phone", "")
         
         print("  📑 Generating PDF and DOCX files...")
         
@@ -173,15 +193,23 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         )
         
         pdf_gen.generate_cover_letter_pdf(
-            cover_letter, str(cover_pdf),
+            cover_letter,
+            str(cover_pdf),
+            job_title=job_title,
+            company_name=company_name,
             candidate_name=candidate_name,
-            company_name=company_name, job_title=job_title
+            candidate_email=candidate_email,
+            candidate_phone=candidate_phone,
         )
         
         docx_gen.generate_cover_letter_docx(
-            cover_letter, str(cover_docx),
+            cover_letter,
+            str(cover_docx),
+            job_title=job_title,
+            company_name=company_name,
             candidate_name=candidate_name,
-            company_name=company_name, job_title=job_title
+            candidate_email=candidate_email,
+            candidate_phone=candidate_phone,
         )
         
         # Calculate match score
