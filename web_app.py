@@ -84,35 +84,50 @@ def extract_job_info_from_url(url: str):
 def generate_documents(job_description, company_name, job_title, resume_data, config):
     """Generate resume and cover letter"""
     try:
-        # Initialize LLM Manager
-        llm_manager = LLMManager(config)
-        
-        # Convert resume to text
+        # Convert resume to text (base content)
         resume_text = render_resume_from_yaml(resume_data)
-        
-        # Generate resume
-        resume_prompt = ENHANCED_RESUME_PROMPT.format(
-            company_name=company_name,
-            job_title=job_title,
-            job_description=job_description,
-            resume_text=resume_text
-        )
-        
-        tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+
+        tailored_resume = None
+        cover_letter = None
+
+        # Try to use LLM if available
+        try:
+            llm_manager = LLMManager(config)
+
+            # Generate resume with LLM
+            resume_prompt = ENHANCED_RESUME_PROMPT.format(
+                company_name=company_name,
+                job_title=job_title,
+                job_description=job_description,
+                resume_text=resume_text
+            )
+            tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
+
+            # Generate cover letter with LLM
+            cover_letter_prompt = ENHANCED_COVER_LETTER_PROMPT.format(
+                company_name=company_name,
+                job_title=job_title,
+                job_description=job_description,
+                resume_text=resume_text
+            )
+            cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+        except Exception as llm_error:
+            # LLM completely unavailable (no keys, quotas, etc.) – fall back
+            print(f"⚠️ LLM unavailable, falling back to base resume only: {llm_error}")
+
+        # If LLM failed, at least use the base resume text and a simple cover letter template
         if not tailored_resume:
-            return None, "Failed to generate resume content"
-        
-        # Generate cover letter
-        cover_letter_prompt = ENHANCED_COVER_LETTER_PROMPT.format(
-            company_name=company_name,
-            job_title=job_title,
-            job_description=job_description,
-            resume_text=resume_text
-        )
-        
-        cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
+            tailored_resume = resume_text
+
         if not cover_letter:
-            return None, "Failed to generate cover letter content"
+            cover_letter = (
+                "Dear Hiring Manager,\n\n"
+                f"I am very interested in the {job_title} role at {company_name}. "
+                "Please find my resume attached, which highlights my experience relevant to this position.\n\n"
+                "Thank you for your time and consideration.\n\n"
+                "Sincerely,\n"
+                f"{resume_data.get('basics', {}).get('name', '')}"
+            )
         
         # Generate files
         pdf_gen = PDFGenerator()
