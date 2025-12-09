@@ -70,10 +70,12 @@ class LLMManager:
             api_key = os.getenv('GEMINI_API_KEY')
             if api_key:
                 genai.configure(api_key=api_key)
-                model = genai.GenerativeModel('gemini-1.5-flash')
+                # Use latest stable Gemini model; allow override via GEMINI_MODEL
+                model_name = os.getenv('GEMINI_MODEL', 'gemini-1.5-flash-latest')
+                model = genai.GenerativeModel(model_name)
                 self.client = model
                 self.provider = 'gemini'
-                print("✓ Using Google Gemini - FREE TIER, 60 req/min, CLOUD")
+                print(f"✓ Using Google Gemini model: {model_name}")
                 return True
         except Exception as e:
             if LLM_PROVIDER == 'gemini':
@@ -133,13 +135,33 @@ class LLMManager:
         elif isinstance(messages, dict):
             # Single dict -> wrap in list
             messages = [messages]
-        
-        if self.provider == 'ollama':
-            return self._generate_ollama(messages, temperature, max_tokens)
-        elif self.provider == 'gemini':
-            return self._generate_gemini(messages, temperature, max_tokens)
-        elif self.provider == 'openai':
-            return self._generate_openai(messages, temperature, max_tokens)
+
+        try:
+            # Primary generation path based on current provider
+            if self.provider == 'ollama':
+                return self._generate_ollama(messages, temperature, max_tokens)
+            elif self.provider == 'gemini':
+                return self._generate_gemini(messages, temperature, max_tokens)
+            elif self.provider == 'openai':
+                return self._generate_openai(messages, temperature, max_tokens)
+        except Exception as e:
+            # If Gemini fails at runtime (invalid key, model 404, quota, etc.),
+            # attempt transparent fallback to the next providers.
+            if self.provider == 'gemini':
+                print("\n⚠️  Gemini generation failed, attempting fallback to other providers:")
+                print(f"   Error: {e}\n")
+
+                # Clear current client and try other providers in priority order
+                self.client = None
+                self.provider = None
+
+                # Try Ollama first (if available), then OpenAI
+                if self._try_ollama() or self._try_openai():
+                    # Recursive call will use the new provider
+                    return self.generate(messages, temperature, max_tokens)
+
+            # If not Gemini, or no fallback succeeded, re-raise the original error
+            raise
     
     def _generate_ollama(self, messages, temperature, max_tokens):
         """Generate with Ollama"""
