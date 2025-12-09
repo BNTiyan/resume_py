@@ -286,7 +286,15 @@ def extract_text_from_resume_file(file_path: Path) -> str:
         return ""
 
 
-def generate_documents(job_description, company_name, job_title, resume_data, config, base_resume_text: str | None = None):
+def generate_documents(
+    job_description,
+    company_name,
+    job_title,
+    resume_data,
+    config,
+    base_resume_text: str | None = None,
+    basics_override: dict | None = None,
+):
     """Generate resume and cover letter"""
     try:
         # Convert resume to text (base content). If a user-uploaded resume
@@ -365,6 +373,9 @@ def generate_documents(job_description, company_name, job_title, resume_data, co
         
         # Generate PDFs and DOCX files
         basics = resume_data.get("basics", {}) or {}
+        if basics_override:
+            # Uploaded resume basics override YAML basics for this request
+            basics = {**basics, **(basics_override or {})}
         candidate_name = basics.get("name", "")
         candidate_email = basics.get("email", "")
         candidate_phone = basics.get("phone", "")
@@ -528,7 +539,9 @@ def generate():
             company_name=company_name,
             job_title=job_title,
             resume_data=resume_data,
-            config=config
+            config=config,
+            base_resume_text=None,
+            basics_override=None,
         )
         
         if error:
@@ -601,14 +614,9 @@ def generate_with_resume():
         saved_path = upload_dir / f"{timestamp}_{safe_name}"
         resume_file.save(str(saved_path))
 
-        # Extract text from uploaded resume using shared parser util
+        # Extract text + basics from uploaded resume using shared parser util.
         parsed = parse_resume_file(saved_path)
         base_resume_text = extract_text_from_resume_file(saved_path)
-        if not base_resume_text:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to read text from uploaded resume (only PDF and DOCX are supported)'
-            }), 400
 
         # If URL provided but no JD text, fetch it
         if job_link and not job_description:
@@ -633,14 +641,19 @@ def generate_with_resume():
         if not job_title:
             job_title = "Position"
 
-        # Generate documents using uploaded resume text as base
+        # Generate documents using the uploaded resume text as the base content
+        # (for scoring and tailoring), but keep YAML resume_data for any
+        # structured fields and fallbacks. Override basics (name, email, phone)
+        # from the uploaded resume so the header matches the uploaded file.
+        basics_override = parsed.get("basics", {}) or {}
         result, error = generate_documents(
             job_description=job_description,
             company_name=company_name,
             job_title=job_title,
             resume_data=resume_data,
             config=config,
-            base_resume_text=base_resume_text
+            base_resume_text=base_resume_text,
+            basics_override=basics_override,
         )
 
         if error or not result:
