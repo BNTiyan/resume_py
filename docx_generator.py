@@ -594,6 +594,88 @@ class WordDocumentGenerator:
             sections[current_section] = '\n'.join(current_content).strip()
         
         return sections
+
+    def generate_cover_letter_docx(
+        self,
+        content: str,
+        output_path: str,
+        job_title: str = "",
+        company_name: str = "",
+        candidate_name: str = "",
+        candidate_email: str = "",
+        candidate_phone: str = ""
+    ) -> bool:
+        """
+        Generate a simple, professional 1-page cover letter DOCX.
+        This is intentionally much simpler than the resume generator.
+        """
+        try:
+            # Ensure output directory exists
+            Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+
+            doc = Document()
+
+            # Set basic margins
+            for section in doc.sections:
+                section.top_margin = Inches(1)
+                section.bottom_margin = Inches(1)
+                section.left_margin = Inches(1)
+                section.right_margin = Inches(1)
+
+            # Header: candidate name
+            if candidate_name:
+                name_para = doc.add_paragraph(candidate_name)
+                name_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                name_run = name_para.runs[0]
+                name_run.font.size = Pt(14)
+                name_run.font.bold = True
+
+            # Contact info
+            if candidate_email or candidate_phone:
+                contact_parts = []
+                if candidate_email:
+                    contact_parts.append(candidate_email)
+                if candidate_phone:
+                    contact_parts.append(candidate_phone)
+                contact_para = doc.add_paragraph(" | ".join(contact_parts))
+                contact_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                if contact_para.runs:
+                    contact_para.runs[0].font.size = Pt(10)
+
+            # Add a blank line
+            doc.add_paragraph()
+
+            # Date (optional)
+            # We could add today's date here if needed
+
+            # Company + role line (optional)
+            if company_name or job_title:
+                target_line = ""
+                if company_name and job_title:
+                    target_line = f"{company_name} – {job_title}"
+                elif company_name:
+                    target_line = company_name
+                elif job_title:
+                    target_line = job_title
+                tgt_para = doc.add_paragraph(target_line)
+                tgt_para.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                if tgt_para.runs:
+                    tgt_para.runs[0].font.size = Pt(11)
+
+                doc.add_paragraph()
+
+            # Main body content (from LLM or fallback template)
+            if content:
+                for line in content.split("\n"):
+                    doc.add_paragraph(line)
+
+            # Save document
+            doc.save(output_path)
+            print(f"[docx] ✅ Cover letter DOCX generated: {output_path}")
+            return True
+        except Exception as e:
+            print(f"[docx] ❌ Error generating cover letter DOCX: {e}")
+            return False
     
     def _parse_experiences(self, text: str) -> list:
         """Parse work experience into structured format - uses LLM when available"""
