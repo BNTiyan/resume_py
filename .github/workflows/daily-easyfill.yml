@@ -1,9 +1,9 @@
 name: daily-autofill
 
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: "0 12 * * *"
+#on:
+  #workflow_dispatch:
+  #schedule:
+  #  - cron: "0 12 * * *"
 
 jobs:
   run:
