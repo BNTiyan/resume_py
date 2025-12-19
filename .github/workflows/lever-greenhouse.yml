@@ -1,9 +1,9 @@
 name: Lever & Greenhouse Pipeline
 
 on:
-  schedule:
-    # Run daily at 10 AM UTC
-    - cron: '0 10 * * *'
+  # schedule:
+  #   # Run daily at 10 AM UTC
+  #   - cron: '0 10 * * *'
   workflow_dispatch:
 
 jobs:
