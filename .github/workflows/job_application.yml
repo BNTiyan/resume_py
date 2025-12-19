@@ -1,9 +1,9 @@
 name: Job Application Pipeline
 
-on:
-  workflow_dispatch:  # Allows manual triggering from GitHub UI
-  schedule:
-    - cron: '0 13 * * 1-5'  # Runs at 13:00 UTC (approx 9 AM EST) Mon-Fri
+# on:
+#   workflow_dispatch:  # Allows manual triggering from GitHub UI
+#   schedule:
+#     - cron: '0 13 * * 1-5'  # Runs at 13:00 UTC (approx 9 AM EST) Mon-Fri
 
 jobs:
   apply-jobs:
