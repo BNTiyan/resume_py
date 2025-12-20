@@ -66,6 +66,14 @@ except Exception:
     load_json = None  # will be checked at runtime
     resolve_from_config = None
 
+# Optional: normalize Selenium selectors at runtime using the same logic as
+# update_selenium_selectors.py (if available), so we don't depend on the
+# config file being manually kept in sync.
+try:
+    from update_selenium_selectors import normalize_site  # type: ignore
+except Exception:
+    normalize_site = None
+
 try:
     from resume_builder import tailor_resume_for_job, build_tailored_resume_doc  # type: ignore
     RESUME_BUILDER_AVAILABLE = True
@@ -1161,6 +1169,21 @@ def main() -> None:
     # Combined options from config
     free_opts = resolved_cfg.get("free_options") or {}
     selenium_opts = resolved_cfg.get("selenium_options") or {}
+
+    # Optionally normalize Selenium selectors at runtime using normalize_site,
+    # so we always have generic link/list/title/location patterns even if the
+    # config file is slightly outdated.
+    if normalize_site and isinstance(selenium_opts.get("sites"), list):
+        normalized_sites: list[dict[str, Any]] = []
+        for s in selenium_opts["sites"]:
+            if isinstance(s, dict):
+                try:
+                    normalized_sites.append(normalize_site(s))
+                except Exception:
+                    normalized_sites.append(s)
+            else:
+                normalized_sites.append(s)
+        selenium_opts["sites"] = normalized_sites
 
     selenium_sites = load_selenium_sites_from_opts(selenium_opts)
 
