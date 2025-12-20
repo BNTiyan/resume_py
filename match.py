@@ -1377,11 +1377,12 @@ def main() -> None:
 
     # Enrich jobs with full descriptions based on keyword matching
     target_roles = resolved_cfg.get("target_roles", [])
-    # Extract AUTOMOTIVE / SAFETY / SYSTEMS skills from the resume itself.
+    # Extract skills/keywords from the resume itself (structured + free-text).
     resume_skills: set[str] = set()
 
-    # 1) Prefer structured skills from YAML (input/resume.yml)
+    # 1) Structured skills from YAML (input/resume.yml): skills[].keywords and work[].technologies
     if resume_structured and isinstance(resume_structured, dict):
+        # skills[].keywords
         skills_section = resume_structured.get("skills") or []
         if isinstance(skills_section, list):
             for group in skills_section:
@@ -1393,9 +1394,26 @@ def main() -> None:
                     kw_str = str(kw).strip()
                     if not kw_str:
                         continue
-                    resume_skills.add(kw_str.lower())
+                    # Tokenize phrases like "Functional Safety (ISO 26262, ASIL)" into individual tokens
+                    for tok in tokenize_for_fuzz(kw_str).split():
+                        resume_skills.add(tok)
 
-    # 2) Fallback / complement: scan free text for common automotive/safety terms
+        # work[].technologies
+        work_entries = resume_structured.get("work") or []
+        if isinstance(work_entries, list):
+            for job in work_entries:
+                if not isinstance(job, dict):
+                    continue
+                for tech in job.get("technologies") or []:
+                    if not tech:
+                        continue
+                    tech_str = str(tech).strip()
+                    if not tech_str:
+                        continue
+                    for tok in tokenize_for_fuzz(tech_str).split():
+                        resume_skills.add(tok)
+
+    # 2) Complement: scan free text for common automotive/safety terms
     resume_lower = resume_text.lower()
     automotive_terms = {
         "automotive", "vehicle", "ev", "electric", "hybrid", "powertrain", "chassis",
@@ -1411,6 +1429,18 @@ def main() -> None:
         "hil", "hardware-in-the-loop", "sil", "mil",
     }
     for term in automotive_terms:
+        if term in resume_lower:
+            for tok in tokenize_for_fuzz(term).split():
+                resume_skills.add(tok)
+
+    # Also add common programming / tooling keywords found in free text
+    general_terms = {
+        "python", "java", "javascript", "typescript",
+        "c", "c++", "c#", "sql", "shell", "bash",
+        "pytorch", "tensorflow", "keras", "scikit-learn", "pandas", "numpy",
+        "aws", "azure", "gcp", "docker", "kubernetes", "jenkins", "terraform",
+    }
+    for term in general_terms:
         if term in resume_lower:
             resume_skills.add(term)
 
@@ -1439,8 +1469,17 @@ def main() -> None:
 
     for kw in highlighted:
         resume_skills.add(kw)
-    
-    print(f"\n[keyword-match] Resume skills detected: {sorted(list(resume_skills)[:20])}")
+
+    # Log resume skills sorted by frequency in the resume (most frequent first)
+    from collections import Counter as _Counter_for_skills
+    _tokens_for_skills = tokenize_for_fuzz(resume_text).split()
+    _freq = _Counter_for_skills(_tokens_for_skills)
+    _sorted_skills = sorted(
+        resume_skills,
+        key=lambda t: _freq.get(t, 0),
+        reverse=True,
+    )
+    print(f"\n[keyword-match] Resume skills detected (top by frequency): {_sorted_skills[:20]}")
     print(f"[keyword-match] Target roles: {target_roles[:10]}")
     
     # Enrich matching jobs with descriptions
