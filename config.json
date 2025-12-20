@@ -78,31 +78,31 @@
     "sites": [
       {
         "company": "meta",
-        "url": "https://www.metacareers.com/jobs",
-        "list_selector": "a[href*='/jobs/'], div[class*='job'], li[class*='job']",
-        "title_selector": "div[class*='title'], span[class*='title'], h2, h3, a[href*='/jobs/'], [aria-label]",
-        "location_selector": "span[class*='location'], div[class*='location']",
-        "link_selector": "a[href*='/jobs/']",
+        "url": "https://www.metacareers.com/jobsearch",
+        "list_selector": "a[href*='/profile/job_details/']",
+        "title_selector": "h3",
+        "location_selector": "span[class*='location'], span[class*='x3a6nna'], div[class*='location']",
+        "link_selector": "a[href*='/profile/job_details/']",
         "source": "selenium:meta",
-        "careers_url": "https://www.metacareers.com/",
+        "careers_url": "https://www.metacareers.com/jobs",
         "domain_filter": "metacareers.com",
         "absolute_base": "https://www.metacareers.com",
         "sleep_seconds": 3,
-        "wait_selector": "a[href*='/jobs/']"
+        "wait_selector": "a[href*='/profile/job_details/']"
       },
       {
         "company": "uber",
         "url": "https://www.uber.com/us/en/careers/list/?department=Engineering",
-        "list_selector": "div[data-testid='job-card'], li[class*='job'], a[href*='/jobs/']",
-        "title_selector": "h3, h4, [class*='title'], a[href*='/jobs/']",
-        "location_selector": ".location, [class*='location'], [data-testid='location']",
-        "link_selector": "a[href*='/jobs/']",
+        "list_selector": "a[href*='/careers/list/']",
+        "title_selector": "a[href*='/careers/list/'], h3, h4",
+        "location_selector": "span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/careers/list/']",
         "source": "selenium:uber",
         "careers_url": "https://www.uber.com/us/en/careers/",
         "domain_filter": "uber.com",
         "absolute_base": "https://www.uber.com",
         "sleep_seconds": 3,
-        "wait_selector": "div[data-testid='job-card'], li[class*='job'], a[href*='/jobs/']"
+        "wait_selector": "a[href*='/careers/list/']"
       },
       {
         "company": "google",
