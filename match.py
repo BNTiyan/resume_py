@@ -23,7 +23,42 @@ if load_dotenv:
     load_dotenv()
 
 import requests
-from rapidfuzz import fuzz
+try:
+    # Prefer rapidfuzz if available (much faster + better token-set scoring).
+    from rapidfuzz import fuzz  # type: ignore
+except Exception:
+    # Pure-Python fallback so the script can run without pip installs.
+    # We emulate fuzz.token_set_ratio using normalized token overlap + SequenceMatcher.
+    import difflib
+
+    class _FuzzFallback:
+        @staticmethod
+        def token_set_ratio(a: str, b: str) -> float:
+            def _tok(s: str) -> set[str]:
+                return {t for t in (s or "").lower().split() if t}
+
+            a_set = _tok(a)
+            b_set = _tok(b)
+            if not a_set and not b_set:
+                return 100.0
+            if not a_set or not b_set:
+                return 0.0
+
+            inter = sorted(a_set & b_set)
+            a_only = sorted(a_set - b_set)
+            b_only = sorted(b_set - a_set)
+
+            # Similar to the canonical approach: compare intersections and unions as strings.
+            s1 = " ".join(inter)
+            s2 = " ".join(inter + a_only)
+            s3 = " ".join(inter + b_only)
+
+            def _ratio(x: str, y: str) -> float:
+                return difflib.SequenceMatcher(None, x, y).ratio() * 100.0
+
+            return max(_ratio(s1, s2), _ratio(s1, s3), _ratio(s2, s3))
+
+    fuzz = _FuzzFallback()
 try:
     # centralize config helpers
     from config import load_json, resolve_from_config  # type: ignore
@@ -148,24 +183,88 @@ def tokenize_for_fuzz(text: str) -> str:
     return " ".join(t for t in text.split() if len(t) > 1)
 
 
-# Basic tech/role keywords to mine from resume text when no explicit query is provided
+# Domain keywords to mine from resume text when no explicit query is provided.
+# For this project we focus on AUTOMOTIVE / SAFETY / SYSTEMS roles (not generic coding).
 RESUME_KEYWORDS = [
-    "python","java","c++","c#","javascript","typescript","go","rust","sql","nosql",
-    "ml","ai","machine","learning","deep","pytorch","tensorflow","keras","sklearn","scikit",
-    "data","engineer","scientist","analytics","pipeline","etl","airflow","dbt",
-    "aws","azure","gcp","lambda","sagemaker","cloudformation","dynamodb","s3","ec2","kinesis",
-    "docker","kubernetes","terraform","jenkins","ansible","gitlab","github","bitbucket",
-    "graphql","rest","api","django","flask","fastapi","react","nextjs","node","spark","hadoop"
+    # Core domain
+    "automotive", "vehicle", "ev", "electric", "hybrid", "powertrain", "chassis",
+    "braking", "steering", "ecu", "can", "lin", "flexray", "ethernet", "autosar",
+    "embedded", "controller", "sensor", "actuator",
+    # ADAS / autonomous
+    "adas", "autonomous", "self-driving", "selfdriving", "autonomy",
+    "perception", "sensorfusion", "sensor-fusion", "lane", "adaptive", "cruise",
+    # Safety / systems engineering
+    "functional", "safety", "functional-safety", "system-safety", "systems",
+    "systems-engineering", "systems engineer", "system engineer",
+    "iso26262", "iso 26262", "asil", "hara", "fmea", "dfmea", "pfmea", "fta",
+    "safety-case", "safety case", "sotif", "iec61508", "arp4754",
+    # Requirements / MBSE / tools
+    "requirements", "requirement", "doors", "polarion", "jama",
+    "sysml", "uml", "mbse", "v-model", "verification", "validation", "integration", "test",
+    "hil", "hardware-in-the-loop", "sil", "mil",
 ]
 
 
 def build_query_from_resume(resume_text: str, max_terms: int = 12) -> str:
-    tokens = set(tokenize_for_fuzz(resume_text).split())
-    matched = [kw for kw in RESUME_KEYWORDS if kw in tokens]
-    if not matched:
-        # fallback to a few generic role terms
-        matched = [t for t in tokens if len(t) > 3][:max_terms]
-    return "|".join(matched[:max_terms])
+    """
+    Automatically derive a search query from the resume text, without requiring
+    a hard-coded keyword list.
+    
+    Strategy:
+      - tokenize the resume
+      - count word and 2-word phrase frequencies
+      - drop very common stopwords and very short tokens
+      - take the top-N most frequent phrases/words
+    """
+    from collections import Counter
+
+    tokens = tokenize_for_fuzz(resume_text).split()
+    if not tokens:
+        return ""
+
+    # Very small stopword list; this keeps implementation simple and domain-agnostic
+    stopwords = {
+        "the", "and", "for", "with", "that", "this", "from", "have", "will",
+        "your", "their", "they", "them", "into", "over", "under", "above",
+        "below", "more", "less", "than", "such", "including", "across",
+        "within", "between", "other", "role", "responsible", "experience",
+        "years", "year", "work", "working", "team", "teams",
+    }
+
+    filtered = [t for t in tokens if len(t) > 3 and t not in stopwords]
+    if not filtered:
+        return ""
+
+    # 1-gram frequencies
+    uni_counter = Counter(filtered)
+
+    # 2-gram (bigram) frequencies, built from adjacent tokens
+    bigrams: list[str] = []
+    for i in range(len(filtered) - 1):
+        w1, w2 = filtered[i], filtered[i + 1]
+        if w1 in stopwords or w2 in stopwords:
+            continue
+        phrase = f"{w1} {w2}"
+        bigrams.append(phrase)
+    bi_counter = Counter(bigrams)
+
+    # Build final list preferring bigrams, then unigrams
+    terms: list[str] = []
+
+    for phrase, _ in bi_counter.most_common(max_terms):
+        if phrase not in terms:
+            terms.append(phrase)
+        if len(terms) >= max_terms:
+            break
+
+    if len(terms) < max_terms:
+        for word, _ in uni_counter.most_common(max_terms):
+            if word not in terms:
+                terms.append(word)
+            if len(terms) >= max_terms:
+                break
+
+    return "|".join(terms[:max_terms])
 
 
 ## cover-letter free text generation now lives in CoverLetterBuilder.compose_concise_text
@@ -679,6 +778,31 @@ def check_sponsorship_available(jd_text: str, check_enabled: bool = False) -> bo
     return True  # Sponsorship likely available
 
 
+def _title_matches_target_role(title: str, target_roles: list[str], min_ratio: float = 0.65) -> bool:
+    """
+    Lenient fuzzy match between a job title and any target role.
+    Uses rapidfuzz token_set_ratio scaled to 0–1. min_ratio ~0.65 = 65%+ similarity.
+    """
+    if not title or not target_roles:
+        return False
+    title_clean = tokenize_for_fuzz(title)
+    if not title_clean:
+        return False
+    for role in target_roles:
+        if not role:
+            continue
+        role_clean = tokenize_for_fuzz(str(role))
+        if not role_clean:
+            continue
+        try:
+            ratio = fuzz.token_set_ratio(title_clean, role_clean) / 100.0
+        except Exception:
+            ratio = 0.0
+        if ratio >= min_ratio:
+            return True
+    return False
+
+
 def keyword_matches_job(job: dict[str, Any], target_roles: list[str], resume_skills: set[str]) -> bool:
     """
     Check if job title/description matches target roles or resume skills.
@@ -691,15 +815,14 @@ def keyword_matches_job(job: dict[str, Any], target_roles: list[str], resume_ski
     Returns:
         True if job matches keywords
     """
-    title_lower = (job.get("title") or "").lower()
+    title = job.get("title") or ""
+    title_lower = title.lower()
     desc_lower = (job.get("description") or "").lower()
     company_lower = (job.get("company") or "").lower()
     
-    # Check if title matches any target role
-    for role in target_roles:
-        role_lower = role.lower()
-        if role_lower in title_lower:
-            return True
+    # Check if title approximately matches any target role (lenient fuzzy match)
+    if _title_matches_target_role(title, target_roles):
+        return True
     
     # Check if key skills appear in title or short description
     if resume_skills:
@@ -1144,6 +1267,43 @@ def main() -> None:
             out_path = str(Path(here / out_dir / f"{prefix}_{stamp}.json"))
 
     resume_text, resume_structured = load_resume_data(resume_file)
+
+    # Automatically enrich target_roles from structured resume (YAML) if available.
+    # This pulls role titles from basics.label and work[].position/title, then merges
+    # them with any target_roles already present in the config.
+    if resume_structured and isinstance(resume_structured, dict):
+        auto_roles: list[str] = []
+        basics = resume_structured.get("basics") or {}
+        label = basics.get("label") or basics.get("title")
+        if isinstance(label, str) and label.strip():
+            auto_roles.append(label.strip())
+        work_entries = resume_structured.get("work") or []
+        if isinstance(work_entries, list):
+            for job in work_entries:
+                if not isinstance(job, dict):
+                    continue
+                role = job.get("position") or job.get("title")
+                if isinstance(role, str) and role.strip():
+                    auto_roles.append(role.strip())
+
+        # Merge with existing target_roles from config, de-duplicated (case-insensitive)
+        existing_roles = resolved_cfg.get("target_roles") or []
+        merged: list[str] = []
+        seen_lower: set[str] = set()
+        for role in list(existing_roles) + auto_roles:
+            if not role:
+                continue
+            role_str = str(role).strip()
+            if not role_str:
+                continue
+            key = role_str.lower()
+            if key in seen_lower:
+                continue
+            seen_lower.add(key)
+            merged.append(role_str)
+        if merged:
+            resolved_cfg["target_roles"] = merged
+
     # If no explicit query provided, derive it from the resume content
     if not query:
         try:
@@ -1217,21 +1377,68 @@ def main() -> None:
 
     # Enrich jobs with full descriptions based on keyword matching
     target_roles = resolved_cfg.get("target_roles", [])
-    # Extract skills from resume for keyword matching
-    resume_skills = set()
+    # Extract AUTOMOTIVE / SAFETY / SYSTEMS skills from the resume itself.
+    resume_skills: set[str] = set()
+
+    # 1) Prefer structured skills from YAML (input/resume.yml)
+    if resume_structured and isinstance(resume_structured, dict):
+        skills_section = resume_structured.get("skills") or []
+        if isinstance(skills_section, list):
+            for group in skills_section:
+                if not isinstance(group, dict):
+                    continue
+                for kw in group.get("keywords") or []:
+                    if not kw:
+                        continue
+                    kw_str = str(kw).strip()
+                    if not kw_str:
+                        continue
+                    resume_skills.add(kw_str.lower())
+
+    # 2) Fallback / complement: scan free text for common automotive/safety terms
     resume_lower = resume_text.lower()
-    common_skills = {
-        "python", "java", "javascript", "typescript", "c++", "go", "rust", "scala",
-        "react", "angular", "vue", "node", "django", "flask", "spring",
-        "tensorflow", "pytorch", "keras", "scikit-learn", "pandas", "numpy",
-        "aws", "azure", "gcp", "kubernetes", "docker", "terraform",
-        "sql", "postgresql", "mysql", "mongodb", "redis", "elasticsearch",
-        "kafka", "spark", "airflow", "mlflow", "kubeflow",
-        "machine learning", "deep learning", "nlp", "computer vision", "mlops"
+    automotive_terms = {
+        "automotive", "vehicle", "ev", "electric", "hybrid", "powertrain", "chassis",
+        "braking", "steering", "ecu", "can", "lin", "flexray", "ethernet", "autosar",
+        "embedded", "controller", "sensor", "actuator",
+        "adas", "autonomous", "self-driving", "selfdriving", "autonomy",
+        "perception", "sensor fusion", "sensor-fusion", "lane", "adaptive cruise",
+        "functional safety", "system safety", "systems engineering", "systems engineer",
+        "iso 26262", "iso26262", "asil", "hara", "fmea", "dfmea", "pfmea", "fta",
+        "safety case", "safety-case", "sotif", "iec 61508", "iec61508", "arp4754",
+        "requirements", "requirement", "doors", "polarion", "jama",
+        "sysml", "uml", "mbse", "v-model", "verification", "validation", "integration", "test",
+        "hil", "hardware-in-the-loop", "sil", "mil",
     }
-    for skill in common_skills:
-        if skill in resume_lower:
-            resume_skills.add(skill)
+    for term in automotive_terms:
+        if term in resume_lower:
+            resume_skills.add(term)
+
+    # 3) Highlighted terms: any words/phrases in the original resume text that
+    # contain uppercase letters (e.g., "ISO 26262", "ADAS", "Functional Safety").
+    # These are treated as strong domain keywords.
+    import re as _re_for_highlights
+    highlighted: set[str] = set()
+    # Split on whitespace, keep raw tokens to preserve capitalization and punctuation
+    raw_tokens = (resume_text or "").split()
+    for tok in raw_tokens:
+        if not tok:
+            continue
+        # Strip common surrounding punctuation
+        cleaned = tok.strip(".,;:()[]{}<>\"'")
+        if len(cleaned) < 3:
+            continue
+        # Skip plain lowercase words (no uppercase at all)
+        if not any(ch.isupper() for ch in cleaned):
+            continue
+        # Skip obvious sentence-start articles/pronouns
+        if cleaned in {"The", "This", "That", "These", "Those", "And", "But"}:
+            continue
+        # Normalize to lowercase keyword
+        highlighted.add(cleaned.lower())
+
+    for kw in highlighted:
+        resume_skills.add(kw)
     
     print(f"\n[keyword-match] Resume skills detected: {sorted(list(resume_skills)[:20])}")
     print(f"[keyword-match] Target roles: {target_roles[:10]}")
@@ -1249,6 +1456,17 @@ def main() -> None:
     print(f"\n[score] Scoring {len(fetched)} jobs with parallel workers...")
     
     from concurrent.futures import ThreadPoolExecutor as Executor, as_completed
+
+    # If nothing was fetched, write empty outputs and exit cleanly.
+    if not fetched:
+        out_file = Path(out_path)
+        out_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(out_file, "w", encoding="utf-8") as f:
+            json.dump([], f, indent=2)
+        csv_path = out_file.with_suffix(".csv")
+        write_csv([], csv_path)
+        print(f"[score] No jobs fetched. Wrote empty outputs: {out_file} and {csv_path}")
+        return
     
     def score_single_job(job: dict[str, Any]) -> dict[str, Any]:
         """Score a single job and return with score and country"""
@@ -1261,7 +1479,9 @@ def main() -> None:
     
     # Parallel scoring
     scored = []
-    max_score_workers = min(resolved_cfg.get("parallel_workers", 5), len(fetched))
+    max_score_workers = min(int(resolved_cfg.get("parallel_workers", 5) or 5), len(fetched))
+    if max_score_workers < 1:
+        max_score_workers = 1
     
     with Executor(max_workers=max_score_workers) as executor:
         future_to_job = {executor.submit(score_single_job, job): job for job in fetched}
@@ -1437,13 +1657,29 @@ def main() -> None:
             top_per_company_limit = int(resolved_cfg.get("top_per_company_limit", 1) or 1)
             if top_per_company_limit < 1:
                 top_per_company_limit = 1
-            
-            print(f"[filter] Starting with {len(top[:100])} jobs")
-            print(f"[filter] Filtering jobs with score >= {score_threshold}")
+
+            # For threshold filtering, always allow jobs whose TITLE approximately matches
+            # any target role (lenient fuzzy match), even if their fuzzy score is slightly
+            # below min_score. This ensures roles like "System Safety Engineer" or
+            # "Functional Safety Engineer" are never dropped.
+            raw_target_roles = resolved_cfg.get("target_roles", []) or []
+
+            def _passes_score_or_title_match(job: dict[str, Any]) -> bool:
+                s = float(job.get("score", 0) or 0)
+                if s >= score_threshold:
+                    return True
+                title_val = job.get("title") or ""
+                if _title_matches_target_role(title_val, raw_target_roles, min_ratio=0.6):
+                    return True
+                return False
+
+            top_window = top[:top_n]
+            print(f"[filter] Starting with {len(top_window)} jobs")
+            print(f"[filter] Filtering jobs with score >= {score_threshold} (or direct title match to target_roles)")
             
             # Debug: Log URL availability before filtering
-            jobs_with_urls = sum(1 for j in top[:100] if j.get("url"))
-            jobs_without_urls = len(top[:100]) - jobs_with_urls
+            jobs_with_urls = sum(1 for j in top_window if j.get("url"))
+            jobs_without_urls = len(top_window) - jobs_with_urls
             print(f"[filter-debug] Before filtering: {jobs_with_urls} jobs with URLs, {jobs_without_urls} without URLs")
             
             if target_locations:
@@ -1451,9 +1687,9 @@ def main() -> None:
             if top_per_company:
                 print(f"[filter] Top per company mode: Will select only highest scoring job from each company")
             
-            # Filter by score
-            filtered_jobs = [j for j in top[:100] if j.get("score", 0) >= score_threshold]
-            print(f"[filter] After score filter: {len(filtered_jobs)} jobs (removed {len(top[:100]) - len(filtered_jobs)})")
+            # Filter by score (with title-based override for strong target role matches)
+            filtered_jobs = [j for j in top_window if _passes_score_or_title_match(j)]
+            print(f"[filter] After score filter: {len(filtered_jobs)} jobs (removed {len(top_window) - len(filtered_jobs)})")
             
             # Debug: Log URL availability after score filter
             filtered_with_urls = sum(1 for j in filtered_jobs if j.get("url"))
@@ -1462,7 +1698,7 @@ def main() -> None:
             
             # Debug: Show score distribution and sample
             print(f"\n[filter-debug] SCORE DISTRIBUTION:")
-            all_scores = [j.get("score", 0) for j in top[:100]]
+            all_scores = [j.get("score", 0) for j in top_window]
             if all_scores:
                 avg_score = sum(all_scores) / len(all_scores)
                 max_score = max(all_scores)
@@ -1471,7 +1707,7 @@ def main() -> None:
                 print(f"  - Max score: {max_score:.2f}")
                 print(f"  - Min score: {min_score:.2f}")
                 print(f"  - Score threshold: {score_threshold}")
-                print(f"  - Jobs above threshold: {len(filtered_jobs)}/{len(top[:100])}")
+                print(f"  - Jobs above threshold: {len(filtered_jobs)}/{len(top_window)}")
             
             if filtered_jobs:
                 print(f"\n[filter] ✅ Sample jobs after score filter:")
@@ -1505,7 +1741,7 @@ def main() -> None:
                 return company_key
 
             best_jobs_by_company: dict[str, list[dict[str, Any]]] = {}
-            for job in top[:100]:
+            for job in top_window:
                 company_key = _job_company_key(job)
                 if not company_key:
                     continue

@@ -316,7 +316,7 @@ def generate_documents(
                 company_name=company_name,
                 job_title=job_title,
                 job_description=job_description,
-                resume_text=resume_text
+                resume_text=resume_text,
             )
             tailored_resume = llm_manager.generate(resume_prompt, max_tokens=6000)
 
@@ -325,11 +325,17 @@ def generate_documents(
                 company_name=company_name,
                 job_title=job_title,
                 job_description=job_description,
-                resume_text=resume_text
+                resume_text=resume_text,
             )
             cover_letter = llm_manager.generate(cover_letter_prompt, max_tokens=1500)
         except Exception as llm_error:
-            # LLM completely unavailable (no keys, quotas, etc.) – fall back
+            # LLM completely unavailable (no keys, quotas, etc.) – fall back.
+            # IMPORTANT: Do NOT change `resume_text` here. We keep whichever
+            # base we already had:
+            # - If the user uploaded a resume, we keep that uploaded text.
+            # - If not, we keep the YAML-based resume text.
+            # This way, the user always gets a full resume even when the LLM is
+            # out of quota or misconfigured.
             print(f"⚠️ LLM unavailable, falling back to base resume only: {llm_error}")
 
         # If LLM failed, at least use the base resume text and a simple cover letter template

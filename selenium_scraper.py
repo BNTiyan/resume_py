@@ -12,10 +12,17 @@ try:
     from selenium.webdriver.common.by import By
     from selenium.webdriver.support.ui import WebDriverWait
     from selenium.webdriver.support import expected_conditions as EC
-    from webdriver_manager.chrome import ChromeDriverManager
     SELENIUM_AVAILABLE = True
 except Exception:
     SELENIUM_AVAILABLE = False
+
+# webdriver-manager is optional; Selenium 4.6+ can use Selenium Manager automatically.
+try:
+    from webdriver_manager.chrome import ChromeDriverManager  # type: ignore
+    _WDM_AVAILABLE = True
+except Exception:
+    ChromeDriverManager = None  # type: ignore
+    _WDM_AVAILABLE = False
 
 try:
     from llm_job_list_extractor import LLMJobListExtractor
@@ -28,6 +35,21 @@ except Exception:
 def create_chrome_driver(headless: bool = True, window_size: str = "1920,1080") -> Any:
     if not SELENIUM_AVAILABLE:
         return None
+    # Ensure webdriver-manager cache stays inside the repo/workspace (avoids permission issues on macOS/Homebrew Python).
+    try:
+        repo_root = os.path.dirname(os.path.abspath(__file__))
+        wdm_dir = os.path.join(repo_root, ".wdm")
+        se_cache_dir = os.path.join(repo_root, ".selenium-cache")
+        os.makedirs(wdm_dir, exist_ok=True)
+        os.makedirs(se_cache_dir, exist_ok=True)
+        os.environ.setdefault("WDM_CACHE_DIR", wdm_dir)
+        os.environ.setdefault("WDM_LOCAL", "1")
+        # Selenium Manager cache location (avoids trying to write to ~/.cache/selenium)
+        os.environ.setdefault("SE_CACHE_PATH", se_cache_dir)
+        # Some environments respect XDG cache home
+        os.environ.setdefault("XDG_CACHE_HOME", se_cache_dir)
+    except Exception:
+        pass
     chrome_options = ChromeOptions()
     if headless:
         chrome_options.add_argument("--headless=new")
@@ -37,8 +59,13 @@ def create_chrome_driver(headless: bool = True, window_size: str = "1920,1080") 
     if window_size:
         chrome_options.add_argument(f"--window-size={window_size}")
     chrome_options.add_argument("--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/118.0.0.0 Safari/537.36")
-    service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    # Prefer webdriver-manager if installed; otherwise rely on Selenium Manager (Selenium 4.6+).
+    if _WDM_AVAILABLE and ChromeDriverManager is not None:
+        service = ChromeService(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+    else:
+        # Selenium Manager will resolve the driver automatically when no Service is provided.
+        driver = webdriver.Chrome(options=chrome_options)
     driver.implicitly_wait(5)
     return driver
 

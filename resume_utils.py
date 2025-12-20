@@ -3,7 +3,10 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any, Iterable, Tuple
 
-import yaml
+try:
+    import yaml  # type: ignore
+except Exception:
+    yaml = None  # type: ignore
 
 
 def load_resume_data(path: Path) -> Tuple[str, dict[str, Any] | None]:
@@ -16,6 +19,9 @@ def load_resume_data(path: Path) -> Tuple[str, dict[str, Any] | None]:
     suffix = path.suffix.lower()
     raw = path.read_text(encoding="utf-8")
     if suffix in {".yml", ".yaml"}:
+        # If PyYAML isn't installed, treat YAML as plain text so matching can still run.
+        if yaml is None:
+            return raw, None
         data = yaml.safe_load(raw) or {}
         rendered = render_resume_from_yaml(data)
         return rendered, data
