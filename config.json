@@ -351,7 +351,7 @@
       {
         "company": "nvidia",
         "url": "https://nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite",
-        "list_selector": "li[class*='css-'], div[class*='job-item']",
+        "list_selector": "li[data-automation-id='jobPosting'], div[class*='job-item']",
         "title_selector": "a[data-automation-id='jobTitle'], h3",
         "location_selector": "div[data-automation-id='locations']",
         "link_selector": "a[data-automation-id='jobTitle']",
@@ -390,7 +390,7 @@
       {
         "company": "qualcomm",
         "url": "https://qualcomm.wd5.myworkdayjobs.com/External",
-        "list_selector": "li[class*='css-'], div[class*='job-item']",
+        "list_selector": "li[data-automation-id='jobPosting'], div[class*='job-item']",
         "title_selector": "a[data-automation-id='jobTitle'], h3",
         "location_selector": "div[data-automation-id='locations']",
         "link_selector": "a[data-automation-id='jobTitle']",
