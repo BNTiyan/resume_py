@@ -179,6 +179,22 @@ class WordDocumentGenerator:
                 name_run.font.color.rgb = RGBColor(0, 0, 0)
             
             contact_details = _extract_contact_details(content, sections_dict)
+            
+            # Use structured data if available to override extracted details
+            if structured and structured.get("basics"):
+                basics = structured["basics"]
+                if basics.get("email"):
+                    contact_details["email"] = basics["email"]
+                if basics.get("phone"):
+                    contact_details["phone"] = basics["phone"]
+                if basics.get("profiles"):
+                    for profile in basics["profiles"]:
+                        network = profile.get("network", "").lower()
+                        if network == "github":
+                            contact_details["github"] = profile.get("url")
+                        elif network == "linkedin":
+                            contact_details["linkedin"] = profile.get("url")
+
             # Display contact info on separate centered lines
             if contact_details.get("email"):
                 email_para = doc.add_paragraph(contact_details["email"])
@@ -211,9 +227,6 @@ class WordDocumentGenerator:
                 if linkedin_para.runs:
                     linkedin_para.runs[0].font.size = Pt(10)
                     linkedin_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
-
-            if contact_line_parts:
-                doc.add_paragraph()
             
             # Professional Summary (15 bullet points)
             summary_added = False

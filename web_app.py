@@ -18,7 +18,9 @@ import traceback
 from match import (
     fetch_job_description_from_url,
     score_job,
-    load_resume_data
+    load_resume_data,
+    run_discovery,
+    resolve_from_config
 )
 from enhanced_prompts import ENHANCED_RESUME_PROMPT, ENHANCED_COVER_LETTER_PROMPT
 from pdf_generator import PDFGenerator
@@ -562,6 +564,56 @@ def generate():
         return jsonify({
             'success': False,
             'error': f'Server error: {str(e)}'
+        }), 500
+
+
+@app.route('/api/discover', methods=['POST'])
+def discover():
+    """Discover jobs based on resume keywords"""
+    try:
+        data = request.json or {}
+        resume_id = data.get('resume_id')
+        
+        # Load configuration
+        config = load_config() or {}
+        resolved_cfg = resolve_from_config(config)
+        
+        # Determine resume path
+        resume_path = None
+        if resume_id:
+            resume_path = Path(app.config['UPLOAD_FOLDER']) / resume_id
+        else:
+            # Fallback to default YAML
+            resume_path = Path("input/resume.yml")
+            if not resume_path.exists():
+                # Try common text location
+                resume_path = Path("input/resume.txt")
+        
+        if not resume_path.exists():
+            return jsonify({
+                'success': False,
+                'error': f'Resume file not found ({resume_path})'
+            }), 404
+            
+        # Load resume data
+        resume_text, resume_structured = load_resume_data(resume_path)
+        
+        # Run discovery
+        # use current directory for Path(".")
+        scored_all, top_n = run_discovery(resume_text, resume_structured, resolved_cfg, Path("."))
+        
+        return jsonify({
+            'success': True,
+            'jobs': top_n,
+            'total_found': len(scored_all)
+        })
+        
+    except Exception as e:
+        print(f"[api] Discovery failed: {e}")
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
         }), 500
 
 

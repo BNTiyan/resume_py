@@ -342,6 +342,8 @@
                 <div class="tabs">
                     <button class="tab active" onclick="switchTab('url')">From Job Link</button>
                     <button class="tab" onclick="switchTab('description')">From Description</button>
+                    <button class="tab" onclick="switchTab('discover')">Discover Jobs</button>
+                </div>
                 </div>
 
                 <!-- URL Tab -->
@@ -447,6 +449,37 @@
                         </button>
                     </form>
                 </div>
+
+                <!-- Discover Tab -->
+                <div class="tab-content" id="discoverTab">
+                    <div style="text-align: center; padding: 20px;">
+                        <p style="margin-bottom: 20px; color: #666;">
+                            We'll analyze your resume keywords and search for the best matching jobs for you.
+                        </p>
+                        <button onclick="discoverJobs(event)" class="btn" id="discoverBtn">
+                            Find Jobs for Me
+                        </button>
+                    </div>
+                    
+                    <div id="discoveredJobsList" style="margin-top: 30px; display: none;">
+                        <h3 style="margin-bottom: 15px;">🔍 Matching Jobs Found</h3>
+                        <div id="jobsTableContainer" style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                                <thead>
+                                    <tr style="background: #f8f9fa; border-bottom: 2px solid #eee;">
+                                        <th style="padding: 12px; text-align: left;">Score</th>
+                                        <th style="padding: 12px; text-align: left;">Title</th>
+                                        <th style="padding: 12px; text-align: left;">Company</th>
+                                        <th style="padding: 12px; text-align: left; min-width: 100px;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="jobsTableBody">
+                                    <!-- Jobs will be inserted here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Loading State -->
@@ -513,8 +546,10 @@
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
             if (tab === 'url') {
                 document.getElementById('urlTab').classList.add('active');
-            } else {
+            } else if (tab === 'description') {
                 document.getElementById('descriptionTab').classList.add('active');
+            } else {
+                document.getElementById('discoverTab').classList.add('active');
             }
         }
 
@@ -684,6 +719,80 @@
             } catch (error) {
                 showError('Network error: ' + error.message);
             }
+        }
+
+        async function discoverJobs(event) {
+            if (event) event.preventDefault();
+            
+            const btn = document.getElementById('discoverBtn');
+            const originalText = btn.textContent;
+            btn.disabled = true;
+            btn.textContent = 'Searching...';
+            
+            document.getElementById('discoveredJobsList').style.display = 'none';
+            document.getElementById('errorAlert').classList.remove('active');
+
+            try {
+                const response = await fetch('/api/discover', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    const jobs = data.jobs;
+                    const tbody = document.getElementById('jobsTableBody');
+                    tbody.innerHTML = '';
+
+                    if (jobs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No jobs found. Try updating your resume keywords.</td></tr>';
+                    } else {
+                        jobs.forEach(job => {
+                            const tr = document.createElement('tr');
+                            tr.style.borderBottom = '1px solid #eee';
+                            
+                            const scoreColor = job.score >= 70 ? '#28a745' : (job.score >= 50 ? '#ffc107' : '#dc3545');
+                            
+                            tr.innerHTML = `
+                                <td style="padding: 12px; font-weight: bold; color: ${scoreColor}">${job.score}%</td>
+                                <td style="padding: 12px;">${job.title}</td>
+                                <td style="padding: 12px;">${job.company}</td>
+                                <td style="padding: 12px;">
+                                    <button onclick="applyToDiscoveredJob('${btoa(JSON.stringify(job))}')" class="btn" style="padding: 5px 10px; font-size: 12px; width: auto; background: #28a745;">Apply</button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                    document.getElementById('discoveredJobsList').style.display = 'block';
+                } else {
+                    showError(data.error || 'Failed to discover jobs');
+                }
+            } catch (error) {
+                showError('Network error: ' + error.message);
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+            }
+        }
+
+        function applyToDiscoveredJob(jobBase64) {
+            const job = JSON.parse(atob(jobBase64));
+            
+            // Switch to description tab and populate it
+            switchTab('description');
+            document.querySelector('.tab[onclick="switchTab(\'description\')"]').click();
+            
+            document.getElementById('jobDescription').value = job.description || '';
+            document.getElementById('companyDesc').value = job.company || '';
+            document.getElementById('titleDesc').value = job.title || '';
+            
+            // Scroll to the top of the form
+            document.getElementById('inputForm').scrollIntoView({ behavior: 'smooth' });
         }
 
         // Check health on load

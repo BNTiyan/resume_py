@@ -1,0 +1,3 @@
+output/*
+.selenium-cache/
+__pycache__

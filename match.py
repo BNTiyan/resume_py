@@ -191,28 +191,6 @@ def tokenize_for_fuzz(text: str) -> str:
     return " ".join(t for t in text.split() if len(t) > 1)
 
 
-# Domain keywords to mine from resume text when no explicit query is provided.
-# For this project we focus on AUTOMOTIVE / SAFETY / SYSTEMS roles (not generic coding).
-RESUME_KEYWORDS = [
-    # Core domain
-    "automotive", "vehicle", "ev", "electric", "hybrid", "powertrain", "chassis",
-    "braking", "steering", "ecu", "can", "lin", "flexray", "ethernet", "autosar",
-    "embedded", "controller", "sensor", "actuator",
-    # ADAS / autonomous
-    "adas", "autonomous", "self-driving", "selfdriving", "autonomy",
-    "perception", "sensorfusion", "sensor-fusion", "lane", "adaptive", "cruise",
-    # Safety / systems engineering
-    "functional", "safety", "functional-safety", "system-safety", "systems",
-    "systems-engineering", "systems engineer", "system engineer",
-    "iso26262", "iso 26262", "asil", "hara", "fmea", "dfmea", "pfmea", "fta",
-    "safety-case", "safety case", "sotif", "iec61508", "arp4754",
-    # Requirements / MBSE / tools
-    "requirements", "requirement", "doors", "polarion", "jama",
-    "sysml", "uml", "mbse", "v-model", "verification", "validation", "integration", "test",
-    "hil", "hardware-in-the-loop", "sil", "mil",
-]
-
-
 def build_query_from_resume(resume_text: str, max_terms: int = 12) -> str:
     """
     Automatically derive a search query from the resume text, without requiring
@@ -1116,78 +1094,48 @@ def write_csv(rows: list[dict[str, Any]], csv_path: Path) -> None:
         print(f"  [csv-debug] Wrote {len(rows)} rows: {url_count} with URLs, {missing_url_count} without URLs")
 
 
-def main() -> None:
-    here = Path(__file__).parent
-    parser = argparse.ArgumentParser(description="Score and list top matching jobs for a given resume (config-only).")
-    parser.add_argument("--config", default=None, help="Path to config JSON")
-    args = parser.parse_args()
-
-    # Load and merge config if provided (or if default exists)
-    cfg_path = Path(args.config) if args.config else (here / "config.json")
-    cfg_data: dict[str, Any] | None = None
-    if cfg_path.exists():
-        try:
-            cfg_data = load_json(cfg_path)
-        except Exception:
-            cfg_data = None
-    resolved_cfg: dict[str, Any] = resolve_from_config(cfg_data) if cfg_data else {}
-
-    # Merge precedence with safe fallback:
-    # 1) if --resume explicitly passed, use it
-    # 2) else if config has resume, use it
-    # 3) else try common defaults in order
-    resume_path_candidate = resolved_cfg.get("resume") or None
-    candidates = [
-        resume_path_candidate,
-        str(here / "resume.txt"),
-        str(here / "input" / "resume.txt"),
-        str(here.parent / "resume" / "input" / "resume.txt"),
-    ]
-    candidates = [c for c in candidates if c]
-    resume_file: Path | None = None
-    for c in candidates:
-        p = Path(c)
-        if p.exists():
-            resume_file = p
-            break
-    if not resume_file:
-        raise SystemExit(
-            "Resume file not found. Set `resume` in config.json or pass --resume <path>. "
-            "Tried: " + ", ".join(candidates)
-        )
-
-    top_n = int(resolved_cfg.get("top", 10))
-    print(resolved_cfg)
-    # Source selection
-    free_source = resolved_cfg.get("source") if resolved_cfg.get("mode") == "free" else None
+def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict, here: Path) -> Tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    """
+    Core discovery and scoring logic, extracted for reusability.
+    Returns (scored_all, top_n_jobs)
+    """
     query = resolved_cfg.get("query")
     location = resolved_cfg.get("location")
     country = resolved_cfg.get("country") or "usa"
     serpapi_key = resolved_cfg.get("serpapi_key")
     jobs_arg = resolved_cfg.get("jobs")
     jobs_url_arg = resolved_cfg.get("jobs_url")
-    # Combined options from config
-    free_opts = resolved_cfg.get("free_options") or {}
     selenium_opts = resolved_cfg.get("selenium_options") or {}
+    
+    # If no explicit query provided, derive it from the resume content
+    if not query:
+        try:
+            query = build_query_from_resume(resume_text)
+            print("[query] derived from resume:", query)
+        except Exception:
+            query = None
 
-    # Optionally normalize Selenium selectors at runtime using normalize_site,
-    # so we always have generic link/list/title/location patterns even if the
-    # config file is slightly outdated.
-    if normalize_site and isinstance(selenium_opts.get("sites"), list):
-        normalized_sites: list[dict[str, Any]] = []
-        for s in selenium_opts["sites"]:
-            if isinstance(s, dict):
-                try:
-                    normalized_sites.append(normalize_site(s))
-                except Exception:
-                    normalized_sites.append(s)
-            else:
-                normalized_sites.append(s)
-        selenium_opts["sites"] = normalized_sites
+    fetched: list[dict[str, Any]] = []
+
+    # Handle local jobs file if provided via config 'jobs' or 'source' (when mode='free')
+    local_jobs_file = jobs_arg or (resolved_cfg.get("source") if resolved_cfg.get("mode") == "free" else None)
+    print(f"[debug] local_jobs_file candidate: {local_jobs_file}")
+    if local_jobs_file and Path(local_jobs_file).exists():
+        try:
+            import json as std_json
+            with open(local_jobs_file, "r") as f:
+                local_jobs = std_json.load(f)
+            if isinstance(local_jobs, list):
+                print(f"[fetch] Loaded {len(local_jobs)} jobs from {local_jobs_file}")
+                fetched.extend(local_jobs)
+                print(f"[debug] fetched list size after local: {len(fetched)}")
+        except Exception as e:
+            print(f"[fetch] Error loading local jobs from {local_jobs_file}: {e}")
+    elif local_jobs_file:
+        print(f"[debug] local_jobs_file {local_jobs_file} does not exist")
 
     selenium_sites = load_selenium_sites_from_opts(selenium_opts)
 
-    fetched: list[dict[str, Any]] = []
     company_sources_cfg = resolved_cfg.get("company_sources") or {}
     hosted_jobs = fetch_company_source_jobs(
         company_sources_cfg,
@@ -1275,73 +1223,6 @@ def main() -> None:
                 combined.append(normalized)
             cfg_companies = combined
             resolved_cfg["companies"] = combined
-    # Default behavior: run both if neither CLI nor config specifies otherwise
-    run_both = bool(resolved_cfg.get("run_both", True))
-
-    # Output handling (configurable dir/prefix)
-    out_cfg = resolved_cfg.get("output", {}) if resolved_cfg else {}
-    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = str(here / "output" / f"matched_jobs_{ts}.json")
-    if out_cfg:
-        out_dir = out_cfg.get("dir")
-        prefix = out_cfg.get("prefix", "matched_jobs")
-        if out_dir:
-            stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            out_path = str(Path(here / out_dir / f"{prefix}_{stamp}.json"))
-
-    resume_text, resume_structured = load_resume_data(resume_file)
-
-    # Automatically enrich target_roles from structured resume (YAML) if available.
-    # This pulls role titles from basics.label and work[].position/title, then merges
-    # them with any target_roles already present in the config.
-    if resume_structured and isinstance(resume_structured, dict):
-        auto_roles: list[str] = []
-        basics = resume_structured.get("basics") or {}
-        label = basics.get("label") or basics.get("title")
-        if isinstance(label, str) and label.strip():
-            auto_roles.append(label.strip())
-        work_entries = resume_structured.get("work") or []
-        if isinstance(work_entries, list):
-            for job in work_entries:
-                if not isinstance(job, dict):
-                    continue
-                role = job.get("position") or job.get("title")
-                if isinstance(role, str) and role.strip():
-                    auto_roles.append(role.strip())
-
-        # Merge with existing target_roles from config, de-duplicated (case-insensitive)
-        existing_roles = resolved_cfg.get("target_roles") or []
-        merged: list[str] = []
-        seen_lower: set[str] = set()
-        for role in list(existing_roles) + auto_roles:
-            if not role:
-                continue
-            role_str = str(role).strip()
-            if not role_str:
-                continue
-            key = role_str.lower()
-            if key in seen_lower:
-                continue
-            seen_lower.add(key)
-            merged.append(role_str)
-        if merged:
-            resolved_cfg["target_roles"] = merged
-
-    # If no explicit query provided, derive it from the resume content
-    if not query:
-        try:
-            query = build_query_from_resume(resume_text)
-            print("[query] derived from resume:", query)
-        except Exception:
-            query = None
-
-    # Fetch jobs according to chosen source(s)
-    fetched: list[dict[str, Any]] = []
-    
-    # Add company source jobs
-    if hosted_jobs:
-        fetched.extend(hosted_jobs)
-        print(f"[fetch] Added {len(hosted_jobs)} jobs from company sources")
 
     # Add SerpApi results if available
     if serpapi_key and query:
@@ -1359,8 +1240,6 @@ def main() -> None:
         except Exception as e:
             print(f"[serpapi] ⚠️ Error fetching from SerpApi: {e}")
 
-    job_assets: dict[str, dict[str, Any]] = {}
-
     def _dedupe_by_url(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen: set[str] = set()
         out: list[dict[str, Any]] = []
@@ -1371,8 +1250,6 @@ def main() -> None:
             seen.add(key)
             out.append(it)
         return out
-
-    # Free-source fetching removed; skip regardless of config.
 
     # Load pre-defined jobs if any
     local_jobs = load_jobs(jobs_arg, jobs_url_arg, here)
@@ -1388,82 +1265,43 @@ def main() -> None:
 
     # Optional Selenium fetch
     use_selenium = bool(selenium_opts.get("enabled"))
-    print(use_selenium)
     if use_selenium:
         raw_sites = selenium_opts.get("sites")
-        try:
-            def _u(x):
-                return x.get("url") if isinstance(x, dict) else str(x)
-            print("[selenium] using sites:", [_u(s) for s in (raw_sites or [])])
-        except Exception:
-            pass
         if raw_sites:
-            # Use parallel Selenium fetching for better performance
             from selenium_scraper import fetch_selenium_sites_parallel
-            
-            selenium_workers = min(3, len(raw_sites))  # Max 3 parallel drivers to avoid resource issues
-            print(f"[selenium] Using parallel fetching with {selenium_workers} workers...")
-            
+            selenium_workers = min(3, len(raw_sites))
             selenium_jobs = fetch_selenium_sites_parallel(
                 raw_sites, 
                 int(resolved_cfg.get("fetch_limit", 200)),
                 max_workers=selenium_workers
             )
-            
-            # Debug: Log URL availability from Selenium
-            selenium_with_urls = sum(1 for j in selenium_jobs if j.get("url"))
-            selenium_without_urls = len(selenium_jobs) - selenium_with_urls
-            print(f"[selenium-debug] Fetched {len(selenium_jobs)} jobs: {selenium_with_urls} with URLs, {selenium_without_urls} without URLs")
-            if selenium_without_urls > 0:
-                print(f"[selenium-debug] Jobs without URLs:")
-                for j in selenium_jobs[:10]:  # Show first 10
-                    if not j.get("url"):
-                        print(f"  - {j.get('company', 'N/A')}: {j.get('title', 'N/A')[:50]} (source: {j.get('source', 'N/A')})")
             fetched += selenium_jobs
 
-    # Country filter (lenient, allows 'Remote')
+    # Country filter
     if country:
         fetched = [j for j in fetched if _matches_country(j.get("location"), country)]
 
-    # Enrich jobs with full descriptions based on keyword matching
+    # Enrich jobs
     target_roles = resolved_cfg.get("target_roles", [])
-    # Extract skills/keywords from the resume itself (structured + free-text).
     resume_skills: set[str] = set()
-
-    # 1) Structured skills from YAML (input/resume.yml): skills[].keywords and work[].technologies
     if resume_structured and isinstance(resume_structured, dict):
-        # skills[].keywords
         skills_section = resume_structured.get("skills") or []
         if isinstance(skills_section, list):
             for group in skills_section:
-                if not isinstance(group, dict):
-                    continue
-                for kw in group.get("keywords") or []:
-                    if not kw:
-                        continue
-                    kw_str = str(kw).strip()
-                    if not kw_str:
-                        continue
-                    # Tokenize phrases like "Functional Safety (ISO 26262, ASIL)" into individual tokens
-                    for tok in tokenize_for_fuzz(kw_str).split():
-                        resume_skills.add(tok)
-
-        # work[].technologies
+                if isinstance(group, dict):
+                    for kw in group.get("keywords") or []:
+                        if kw:
+                            for tok in tokenize_for_fuzz(str(kw)).split():
+                                resume_skills.add(tok)
         work_entries = resume_structured.get("work") or []
         if isinstance(work_entries, list):
             for job in work_entries:
-                if not isinstance(job, dict):
-                    continue
-                for tech in job.get("technologies") or []:
-                    if not tech:
-                        continue
-                    tech_str = str(tech).strip()
-                    if not tech_str:
-                        continue
-                    for tok in tokenize_for_fuzz(tech_str).split():
-                        resume_skills.add(tok)
+                if isinstance(job, dict):
+                    for tech in job.get("technologies") or []:
+                        if tech:
+                            for tok in tokenize_for_fuzz(str(tech)).split():
+                                resume_skills.add(tok)
 
-    # 2) Complement: scan free text for common automotive/safety terms
     resume_lower = resume_text.lower()
     automotive_terms = {
         "automotive", "vehicle", "ev", "electric", "hybrid", "powertrain", "chassis",
@@ -1483,7 +1321,6 @@ def main() -> None:
             for tok in tokenize_for_fuzz(term).split():
                 resume_skills.add(tok)
 
-    # Also add common programming / tooling keywords found in free text
     general_terms = {
         "python", "java", "javascript", "typescript",
         "c", "c++", "c#", "sql", "shell", "bash",
@@ -1494,45 +1331,6 @@ def main() -> None:
         if term in resume_lower:
             resume_skills.add(term)
 
-    # 3) Highlighted terms: any words/phrases in the original resume text that
-    # contain uppercase letters (e.g., "ISO 26262", "ADAS", "Functional Safety").
-    # These are treated as strong domain keywords.
-    import re as _re_for_highlights
-    highlighted: set[str] = set()
-    # Split on whitespace, keep raw tokens to preserve capitalization and punctuation
-    raw_tokens = (resume_text or "").split()
-    for tok in raw_tokens:
-        if not tok:
-            continue
-        # Strip common surrounding punctuation
-        cleaned = tok.strip(".,;:()[]{}<>\"'")
-        if len(cleaned) < 3:
-            continue
-        # Skip plain lowercase words (no uppercase at all)
-        if not any(ch.isupper() for ch in cleaned):
-            continue
-        # Skip obvious sentence-start articles/pronouns
-        if cleaned in {"The", "This", "That", "These", "Those", "And", "But"}:
-            continue
-        # Normalize to lowercase keyword
-        highlighted.add(cleaned.lower())
-
-    for kw in highlighted:
-        resume_skills.add(kw)
-
-    # Log resume skills sorted by frequency in the resume (most frequent first)
-    from collections import Counter as _Counter_for_skills
-    _tokens_for_skills = tokenize_for_fuzz(resume_text).split()
-    _freq = _Counter_for_skills(_tokens_for_skills)
-    _sorted_skills = sorted(
-        resume_skills,
-        key=lambda t: _freq.get(t, 0),
-        reverse=True,
-    )
-    print(f"\n[keyword-match] Resume skills detected (top by frequency): {_sorted_skills[:20]}")
-    print(f"[keyword-match] Target roles: {target_roles[:10]}")
-    
-    # Enrich matching jobs with descriptions
     if target_roles or resume_skills:
         fetched = enrich_jobs_with_descriptions(
             fetched, 
@@ -1541,56 +1339,122 @@ def main() -> None:
             max_workers=resolved_cfg.get("parallel_workers", 5)
         )
     
-    # Score and select
-    print(f"\n[score] Scoring {len(fetched)} jobs with parallel workers...")
+    def score_single_job(job: dict[str, Any]) -> dict[str, Any]:
+        s = score_job(job, resume_text)
+        cval = "usa" if _matches_country(job.get("location"), "usa") else ""
+        return {**job, "score": round(s, 2), "country": cval}
     
+    scored = []
     from concurrent.futures import ThreadPoolExecutor as Executor, as_completed
+    max_score_workers = min(int(resolved_cfg.get("parallel_workers", 5) or 5), len(fetched) or 1)
+    with Executor(max_workers=max_score_workers) as executor:
+        future_to_job = {executor.submit(score_single_job, job): job for job in fetched}
+        for future in as_completed(future_to_job):
+            try:
+                scored.append(future.result())
+            except Exception:
+                job = future_to_job[future]
+                scored.append({**job, "score": 0.0, "country": ""})
+    
+    scored.sort(key=lambda x: x["score"], reverse=True)
+    top_n = int(resolved_cfg.get("top", 10))
+    return scored, scored[:top_n]
 
-    # If nothing was fetched, write empty outputs and exit cleanly.
-    if not fetched:
+
+def main() -> None:
+    here = Path(__file__).parent
+    parser = argparse.ArgumentParser(description="Score and list top matching jobs for a given resume (config-only).")
+    parser.add_argument("--config", default=None, help="Path to config JSON")
+    args = parser.parse_args()
+
+    # Load and merge config if provided (or if default exists)
+    cfg_path = Path(args.config) if args.config else (here / "config.json")
+    cfg_data: dict[str, Any] | None = None
+    if cfg_path.exists():
+        try:
+            cfg_data = load_json(cfg_path)
+            print(f"[debug] Loaded cfg_data from {cfg_path}: {cfg_data.get('jobs')}")
+        except Exception:
+            cfg_data = None
+    resolved_cfg: dict[str, Any] = resolve_from_config(cfg_data) if cfg_data else {}
+    print(f"[debug] Resolved_cfg jobs: {resolved_cfg.get('jobs')}")
+
+    # Merge precedence with safe fallback:
+    # 1) if --resume explicitly passed, use it
+    # 2) else if config has resume, use it
+    # 3) else try common defaults in order
+    resume_path_candidate = resolved_cfg.get("resume") or None
+    candidates = [
+        resume_path_candidate,
+        str(here / "resume.txt"),
+        str(here / "input" / "resume.txt"),
+        str(here.parent / "resume" / "input" / "resume.txt"),
+    ]
+    candidates = [c for c in candidates if c]
+    resume_file: Path | None = None
+    for c in candidates:
+        p = Path(c)
+        if p.exists():
+            resume_file = p
+            break
+    if not resume_file:
+        raise SystemExit(
+            "Resume file not found. Set `resume` in config.json or pass --resume <path>. "
+            "Tried: " + ", ".join(candidates)
+        )
+
+    top_n = int(resolved_cfg.get("top", 10))
+    print(resolved_cfg)
+    # Source selection
+    free_source = resolved_cfg.get("source") if resolved_cfg.get("mode") == "free" else None
+    query = resolved_cfg.get("query")
+    location = resolved_cfg.get("location")
+    country = resolved_cfg.get("country") or "usa"
+    serpapi_key = resolved_cfg.get("serpapi_key")
+    jobs_arg = resolved_cfg.get("jobs")
+    jobs_url_arg = resolved_cfg.get("jobs_url")
+    # Set jobs in resolved_cfg if not present but passed as arg
+    if jobs_arg and not resolved_cfg.get("jobs"):
+        resolved_cfg["jobs"] = jobs_arg
+    # Combined options from config
+    free_opts = resolved_cfg.get("free_options") or {}
+    selenium_opts = resolved_cfg.get("selenium_options") or {}
+
+    # Optionally normalize Selenium selectors at runtime
+    if normalize_site and isinstance(selenium_opts.get("sites"), list):
+        normalized_sites: list[dict[str, Any]] = []
+        for s in selenium_opts["sites"]:
+            if isinstance(s, dict):
+                try:
+                    normalized_sites.append(normalize_site(s))
+                except Exception:
+                    normalized_sites.append(s)
+            else:
+                normalized_sites.append(s)
+        selenium_opts["sites"] = normalized_sites
+
+    # Define output paths
+    out_path = resolved_cfg.get("output", {}).get("json", "output/scored_jobs.json")
+    csv_path_str = resolved_cfg.get("output", {}).get("csv", "output/scored_jobs.csv")
+
+    # Load resume data
+    resume_text, resume_structured = load_resume_data(resume_file)
+
+    # Core discovery and scoring
+    scored, top = run_discovery(resume_text, resume_structured, resolved_cfg, here)
+    
+    # If nothing was fetched, top will be empty.
+    if not scored:
         out_file = Path(out_path)
         out_file.parent.mkdir(parents=True, exist_ok=True)
         with open(out_file, "w", encoding="utf-8") as f:
             json.dump([], f, indent=2)
-        csv_path = out_file.with_suffix(".csv")
+        csv_path = Path(csv_path_str)
         write_csv([], csv_path)
         print(f"[score] No jobs fetched. Wrote empty outputs: {out_file} and {csv_path}")
         return
-    
-    def score_single_job(job: dict[str, Any]) -> dict[str, Any]:
-        """Score a single job and return with score and country"""
-        if not job.get("url"):
-            print(f"[score-debug] Job without URL: {job.get('company', 'N/A')} - {job.get('title', 'N/A')[:50]} (source: {job.get('source', 'N/A')})")
-        s = score_job(job, resume_text)
-        # derive country value for CSV
-        cval = "usa" if _matches_country(job.get("location"), "usa") else ""
-        return {**job, "score": round(s, 2), "country": cval}
-    
-    # Parallel scoring
-    scored = []
-    max_score_workers = min(int(resolved_cfg.get("parallel_workers", 5) or 5), len(fetched))
-    if max_score_workers < 1:
-        max_score_workers = 1
-    
-    with Executor(max_workers=max_score_workers) as executor:
-        future_to_job = {executor.submit(score_single_job, job): job for job in fetched}
-        
-        for idx, future in enumerate(as_completed(future_to_job), 1):
-            try:
-                result = future.result()
-                scored.append(result)
-                if idx % 10 == 0:  # Progress update every 10 jobs
-                    print(f"  [score] Progress: {idx}/{len(fetched)} jobs scored")
-            except Exception as e:
-                job = future_to_job[future]
-                print(f"  [score-error] Failed to score {job.get('company')}: {e}")
-                # Add job with score 0 to not lose it
-                scored.append({**job, "score": 0.0, "country": ""})
-    
-    print(f"[score] Completed scoring {len(scored)} jobs")
-    
-    scored.sort(key=lambda x: x["score"], reverse=True)
-    top = scored[: top_n]
+
+    fetched = scored # for backward compatibility in CLI logs
     
     # Debug: Log URL availability in top N
     top_with_urls = sum(1 for j in top if j.get("url"))
@@ -1671,38 +1535,47 @@ def main() -> None:
             use_llm_resumer = False
             llm_resumer = None
             llm_resumer_ready = False
-            use_llm_cover = False
             llm_cover = None
 
-            if LLM_RESUMER_AVAILABLE and can_use_openai:
+            # Initialize LLM component status variables
+            use_llm_resumer = False
+            use_llm_cover = False
+            use_job_desc_extractor = False
+            
+            if LLM_RESUMER_AVAILABLE and (can_use_openai or gemini_key):
                 try:
-                    llm_resumer = LLMResumer(openai_key)
+                    provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
+                    api_key = openai_key if provider == "openai" else gemini_key
+                    llm_resumer = LLMResumer(api_key)
                     llm_resumer.set_resume_data(resume_text)
                     llm_resumer_ready = True
                     use_llm_resumer = True
-                    print("[llm] LLMResumer initialized and will be used for resume generation")
+                    print(f"[llm] LLMResumer initialized ({provider}) and will be used for resume generation")
                 except Exception as e:
                     llm_resumer = None
                     llm_resumer_ready = False
                     print(f"[llm] Failed to initialize LLMResumer: {e}. Falling back.")
             
-            if not use_job_app_gen and not use_llm_resumer and LLM_COVER_LETTER_AVAILABLE and can_use_openai:
+            if not use_job_app_gen and not use_llm_resumer and LLM_COVER_LETTER_AVAILABLE and (can_use_openai or gemini_key):
                 try:
-                    llm_cover = LLMCoverLetterJobDescription(openai_key)
+                    provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
+                    api_key = openai_key if provider == "openai" else gemini_key
+                    llm_cover = LLMCoverLetterJobDescription(api_key)
                     llm_cover.set_resume(resume_text)
                     use_llm_cover = True
-                    print("[llmcover] Using LLMCoverLetterJobDescription (LangChain) for cover letter generation")
+                    print(f"[llmcover] Using LLMCoverLetterJobDescription ({provider}) for cover letter generation")
                 except Exception as e:
                     print(f"[llmcover] Failed to initialize LLMCoverLetterJobDescription: {e}. Falling back.")
             
             # Initialize job description extractor (no embeddings needed)
-            use_job_desc_extractor = False
             job_desc_extractor = None
-            if JOB_DESC_EXTRACTOR_AVAILABLE and can_use_openai:
+            if JOB_DESC_EXTRACTOR_AVAILABLE and (can_use_openai or gemini_key):
                 try:
-                    job_desc_extractor = JobDescriptionExtractor(openai_key)
+                    provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
+                    api_key = openai_key if provider == "openai" else gemini_key
+                    job_desc_extractor = JobDescriptionExtractor(api_key)
                     use_job_desc_extractor = True
-                    print("[extractor] Using LLM-based job description extractor (no embeddings)")
+                    print(f"[extractor] Using LLM-based job description extractor ({provider})")
                 except Exception as e:
                     print(f"[extractor] Failed to initialize: {e}. Will use basic extraction.")
             
@@ -2051,6 +1924,10 @@ def main() -> None:
                 role_label = role or "Role"
                 jd_text = (job.get("description") or "").strip()
                 
+                if jd_text and len(jd_text) > 50:
+                    print(f"  [parallel-fetch] {company_label}: ✅ Using existing description ({len(jd_text)} chars)")
+                    return job
+
                 # Debug: Log URL status
                 if not job_url:
                     print(f"  [parallel-fetch] {company_label}: ⚠️ NO URL in job data")
@@ -2152,12 +2029,16 @@ def main() -> None:
                 "sponsorship_blocked": 0,
                 "created": 0,
             }
+            # Now start tailoring
+            cover_letter_results = []
+            resume_results = []
+            job_assets = {} # Initialize as empty dict, will be populated per job
             
-            for idx, j in enumerate(filtered_jobs):
-                score = j.get("score", 0)
-                company = _normalize_meta_field(j.get("company"))
+            for idx, job_dict in enumerate(filtered_jobs, 1):
+                score = job_dict.get("score", 0)
+                company = _normalize_meta_field(job_dict.get("company"))
                 if not company:
-                    source = j.get("source", "")
+                    source = job_dict.get("source", "")
                     if ":" in source:
                         company = _normalize_meta_field(source.split(":")[-1].strip().title())
                         j["company"] = company
@@ -2557,14 +2438,28 @@ def main() -> None:
                         jobgen_success = True
                     except Exception as e:
                         print(f"  [jobgen] ❌ Error for {company}: {e}. Falling back.")
-                elif not jd_text:
-                    print(f"  [jobgen] ⚠️  Skipping {company} - No job description available")
-                elif not auto_tailor:
-                    print(f"  [jobgen] ⚠️  Skipping {company} - auto_tailor is disabled")
-                elif not use_job_app_gen:
-                    print(f"  [jobgen] ⚠️  Skipping {company} - JobApplicationGenerator not available")
-                
-                if jobgen_success:
+                if not jobgen_success:
+                    # Fallback to standard generation if LLM generation skipped/failed
+                    print(f"  [fallback] Using standard generation for {company_label}...")
+                    from pdf_generator import generate_resume_pdf
+                    from docx_generator import generate_resume_docx
+                    
+                    pdf_out = tailored_resumes_dir / f"resume_{base}.pdf"
+                    docx_out = tailored_resumes_dir / f"resume_{base}.docx"
+                    
+                    try:
+                        generate_resume_pdf(resume_text, str(pdf_out), structured=resume_structured)
+                        assets["resume_pdf"] = str(pdf_out)
+                        print(f"  [fallback] ✅ Resume PDF saved: {pdf_out.name}")
+                    except Exception as e:
+                        print(f"  [fallback] ⚠️ PDF failed: {e}")
+                        
+                    try:
+                        generate_resume_docx(resume_text, str(docx_out), structured=resume_structured)
+                        assets["resume_docx"] = str(docx_out)
+                        print(f"  [fallback] ✅ Resume DOCX saved: {docx_out.name}")
+                    except Exception as e:
+                        print(f"  [fallback] ⚠️ DOCX failed: {e}")
                     if should_force_llm_resume and not llm_resume_generated:
                         try:
                             llm_resume_text = (

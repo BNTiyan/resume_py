@@ -15,6 +15,7 @@ except Exception:
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,21 +27,43 @@ class LLMCoverLetterJobDescription:
     Adapted from llm_generate_cover_letter_from_job.py
     """
     
-    def __init__(self, openai_api_key: str = None):
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key required")
+    def __init__(self, api_key: str = None, provider: Optional[str] = None):
+        self.provider = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+        openai_key = api_key if self.provider == "openai" else os.getenv("OPENAI_API_KEY")
+        gemini_key = api_key if self.provider == "gemini" else os.getenv("GEMINI_API_KEY")
+
+        if self.provider == "openai" and not openai_key:
+            if gemini_key:
+                self.provider = "gemini"
+            else:
+                raise ValueError("OpenAI API key required")
         
-        embedding_model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002")
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=api_key,
-            temperature=0.4
-        )
-        self.llm_embeddings = OpenAIEmbeddings(
-            model=embedding_model,
-            api_key=api_key,
-        )
+        if self.provider == "gemini" and not gemini_key:
+            raise ValueError("Gemini API key required")
+
+        if self.provider == "openai":
+            embedding_model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002")
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                api_key=openai_key,
+                temperature=0.4
+            )
+            self.llm_embeddings = OpenAIEmbeddings(
+                model=embedding_model,
+                api_key=openai_key,
+            )
+        else:
+            gemini_model = os.getenv("GEMINI_RESUME_MODEL", "gemini-1.5-flash")
+            self.llm = ChatGoogleGenerativeAI(
+                model=gemini_model,
+                google_api_key=gemini_key,
+                temperature=0.4
+            )
+            # Use a dummy or compatible embedding if needed, or skip if not used in generate logic
+            self.llm_embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=gemini_key,
+            )
         self.resume: Optional[str] = None
         self.job_description: Optional[str] = None
 

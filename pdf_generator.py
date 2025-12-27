@@ -289,6 +289,22 @@ r45        Generate a professional 3-page resume PDF
                 story.append(Paragraph(name_to_display, self.styles['CustomHeader']))
             
             contact_details = _extract_contact_details(content, sections)
+            
+            # Use structured data if available to override extracted details
+            if structured and structured.get("basics"):
+                basics = structured["basics"]
+                if basics.get("email"):
+                    contact_details["email"] = basics["email"]
+                if basics.get("phone"):
+                    contact_details["phone"] = basics["phone"]
+                if basics.get("profiles"):
+                    for profile in basics["profiles"]:
+                        network = profile.get("network", "").lower()
+                        if network == "github":
+                            contact_details["github"] = profile.get("url")
+                        elif network == "linkedin":
+                            contact_details["linkedin"] = profile.get("url")
+
             # Display contact info on separate lines
             if contact_details.get("email"):
                 story.append(Paragraph(contact_details["email"], self.styles['ContactInfo']))

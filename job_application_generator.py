@@ -56,11 +56,11 @@ class JobApplicationGenerator:
                 raise ValueError("Gemini API key required for Gemini provider")
             genai.configure(api_key=gemini_key)
             # Prefer stable, supported IDs; fall back if unavailable
-            preferred = os.getenv("GEMINI_RESUME_MODEL", "gemini-2.5-flash")
+            preferred = os.getenv("GEMINI_RESUME_MODEL", "gemini-1.5-flash")
             try:
                 self.gemini_model = genai.GenerativeModel(preferred)
             except Exception:
-                # Fallback to flash if pro is not available for current API
+                # Fallback to flash if preferred is not available
                 fallback = "gemini-1.5-flash"
                 self.gemini_model = genai.GenerativeModel(fallback)
                 os.environ.setdefault("GEMINI_RESUME_MODEL", fallback)

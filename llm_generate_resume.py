@@ -25,6 +25,7 @@ from dotenv import load_dotenv
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_google_genai import ChatGoogleGenerativeAI
 from loguru import logger
 
 load_dotenv()
@@ -403,29 +404,52 @@ class LLMResumer:
 
     def __init__(
         self,
-        openai_api_key: Optional[str] = None,
+        api_key: Optional[str] = None,
         strings: Optional[Any] = None,
         *,
         model: str = "gpt-4o-mini",
         temperature: float = 0.35,
+        provider: Optional[str] = None,
     ) -> None:
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key required")
+        self.provider = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+        openai_key = api_key if self.provider == "openai" else os.getenv("OPENAI_API_KEY")
+        gemini_key = api_key if self.provider == "gemini" else os.getenv("GEMINI_API_KEY")
 
-        self.api_key = api_key
+        if self.provider == "openai" and not openai_key:
+            if gemini_key:
+                self.provider = "gemini"
+            else:
+                raise ValueError("OpenAI API key required")
+        
+        if self.provider == "gemini" and not gemini_key:
+            raise ValueError("Gemini API key required")
+
         self.model = model
         self.temperature = temperature
-        self.llm_resume = ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            temperature=temperature,
-        )
-        self.llm_cover = ChatOpenAI(
-            model=model,
-            api_key=api_key,
-            temperature=0.45,
-        )
+        
+        if self.provider == "openai":
+            self.llm_resume = ChatOpenAI(
+                model=model,
+                api_key=openai_key,
+                temperature=temperature,
+            )
+            self.llm_cover = ChatOpenAI(
+                model=model,
+                api_key=openai_key,
+                temperature=0.45,
+            )
+        else:
+            gemini_model = os.getenv("GEMINI_RESUME_MODEL", "gemini-1.5-flash")
+            self.llm_resume = ChatGoogleGenerativeAI(
+                model=gemini_model,
+                google_api_key=gemini_key,
+                temperature=temperature,
+            )
+            self.llm_cover = ChatGoogleGenerativeAI(
+                model=gemini_model,
+                google_api_key=gemini_key,
+                temperature=0.45,
+            )
 
         self.strings = self._coerce_strings(strings)
         self.resume_text: str = ""

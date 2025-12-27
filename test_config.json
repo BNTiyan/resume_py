@@ -1,0 +1,43 @@
+{
+    "resume": "input/resume.yml",
+    "top": 5,
+    "country": "usa",
+    "fetch_limit": 10,
+    "min_score": 1,
+    "min_match_score": 1,
+    "top_per_company": false,
+    "companies": [
+        "amazon"
+    ],
+    "target_roles": [
+        "software engineer"
+    ],
+    "auto_tailor_resume": true,
+    "tailor_threshold": 1,
+    "extract_job_descriptions": true,
+    "openai": {
+        "enabled": false
+    },
+    "gemini": {
+        "enabled": true
+    },
+    "selenium_options": {
+        "enabled": true,
+        "sites": [
+            {
+                "company": "amazon",
+                "url": "https://www.amazon.jobs/en/search",
+                "list_selector": "div[class*='job-tile'], li[class*='job-tile'], div[class*='job-card'], div[class*='job-listing'], li[class*='job'], article[class*='job'], a[href*='/job/'], a[href*='/jobs/']",
+                "title_selector": "h3, a[class*='title']",
+                "location_selector": "span[class*='location'], div[class*='location']",
+                "link_selector": "a[href*='/jobs/'], a[href*='/job/'], a[href*='careers']",
+                "source": "selenium:amazon",
+                "careers_url": "https://www.amazon.jobs/",
+                "domain_filter": "amazon.jobs",
+                "absolute_base": "https://www.amazon.jobs",
+                "sleep_seconds": 3,
+                "wait_selector": "div[class*='job-tile'], li[class*='job-tile']"
+            }
+        ]
+    }
+}

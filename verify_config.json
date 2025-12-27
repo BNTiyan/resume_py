@@ -1,0 +1,22 @@
+{
+    "resume": "input/resume.yml",
+    "top": 1,
+    "fetch": {
+        "mode": "free",
+        "source": "input/mock_jobs.json",
+        "jobs": "input/mock_jobs.json"
+    },
+    "auto_tailor_resume": true,
+    "tailor_threshold": 1,
+    "openai": {
+        "enabled": false
+    },
+    "llm_provider": "gemini",
+    "output": {
+        "json": "output/scored_jobs.json",
+        "csv": "output/scored_jobs.csv"
+    },
+    "resume_builder": {
+        "output_dir": "output/test_resumes"
+    }
+}
