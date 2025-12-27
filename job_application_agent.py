@@ -26,6 +26,7 @@ except Exception:
     JobApplicationGenerator = None  # type: ignore[misc]
 
 from resume_utils import load_resume_data
+from match import fetch_serpapi_google_jobs, build_query_from_resume
 
 # Configure logging
 logging.basicConfig(
@@ -59,6 +60,7 @@ class AgentConfig:
     openai_api_key: str = None
     openai_model: str = "gpt-4o-mini"
     use_embeddings: bool = True
+    serpapi_api_key: Optional[str] = None
     
     # Generation settings
     auto_generate_resume: bool = True
@@ -81,6 +83,8 @@ class AgentConfig:
     def __post_init__(self):
         if self.openai_api_key is None:
             self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        if self.serpapi_api_key is None:
+            self.serpapi_api_key = os.getenv("SERPAPI_KEY")
         if self.submit_providers is None:
             self.submit_providers = ["workday"]
         if self.target_companies is None:
@@ -186,15 +190,30 @@ class JobApplicationAgent:
                     logger.info("LLM components initialized (OpenAI)")
                 else:
                     logger.warning("Failed to initialize OpenAI application generator")
-            else:
-                logger.warning("No OpenAI API key - LLM features disabled")
+            
+            # Fallback to Gemini if OpenAI failed or not provided
+            if not self.app_generator: # We recycled serpapi_api_key check? No, agent has serpapi_api_key. 
+                # Actually, agent should have its own gemini key if we want to be clean, 
+                # but let's check environment as well.
+                gemini_key = os.getenv("GEMINI_API_KEY")
+                if gemini_key:
+                    try:
+                        self.job_desc_extractor = JobDescriptionExtractor(gemini_key)
+                        self.app_generator = self._build_application_generator("gemini")
+                        if self.app_generator:
+                            logger.info("LLM components initialized (Gemini)")
+                    except Exception as e:
+                        logger.warning(f"Failed to initialize Gemini components: {e}")
+
+            if not self.app_generator:
+                logger.warning("No LLM API keys found or initialization failed - LLM features disabled")
             
             # Optionally initialize autofill
             if self.config.auto_submit:
                 try:
-                    from workday_autofill import WorkdayAutofill
-                    self.autofill_available = True
-                    logger.info("Autofill components available")
+                    # from workday_autofill import WorkdayAutofill
+                    self.autofill_available = False
+                    logger.info("Autofill components (Workday) skipped due to corruption")
                 except Exception:
                     self.autofill_available = False
                     logger.warning("Autofill not available")
@@ -234,6 +253,53 @@ class JobApplicationAgent:
                 logger.error(f"  Failed to scrape {source}: {e}")
                 self.stats["failures"] += 1
                 continue
+        
+        # Add SerpApi Discovery
+        if self.config.serpapi_api_key:
+            logger.info("Discovering additional jobs via SerpApi...")
+            # Use target roles and companies to build queries
+            queries = []
+            if self.config.target_roles:
+                for role in self.config.target_roles[:3]: # Limit queries
+                    if self.config.target_companies:
+                        for company in self.config.target_companies[:2]:
+                            queries.append(f"{role} {company}")
+                    else:
+                        queries.append(role)
+            
+            # If no queries yet, try deriving from resume
+            if not queries and self.base_resume_text:
+                derived_query = build_query_from_resume(self.base_resume_text)
+                if derived_query:
+                    queries.append(derived_query)
+            
+            for q in queries[:5]: # Hard limit on total queries
+                try:
+                    logger.info(f"  Searching SerpApi for: {q}")
+                    serp_jobs = fetch_serpapi_google_jobs(
+                        query=q,
+                        location=self.config.target_locations[0] if self.config.target_locations else None,
+                        api_key=self.config.serpapi_api_key,
+                        fetch_limit=50
+                    )
+                    if serp_jobs:
+                        all_jobs.extend(serp_jobs)
+                        logger.info(f"    Added {len(serp_jobs)} jobs from SerpApi")
+                except Exception as e:
+                    logger.error(f"  SerpApi search failed for '{q}': {e}")
+
+        # Deduplicate
+        seen_urls = set()
+        unique_jobs = []
+        for job in all_jobs:
+            url = job.get("url")
+            if url and url not in seen_urls:
+                seen_urls.add(url)
+                unique_jobs.append(job)
+            elif not url:
+                unique_jobs.append(job)
+        
+        all_jobs = unique_jobs
         
         self.stats["jobs_discovered"] = len(all_jobs)
         logger.info(f"Total jobs discovered: {len(all_jobs)}")

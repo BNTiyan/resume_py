@@ -1337,6 +1337,28 @@ def main() -> None:
 
     # Fetch jobs according to chosen source(s)
     fetched: list[dict[str, Any]] = []
+    
+    # Add company source jobs
+    if hosted_jobs:
+        fetched.extend(hosted_jobs)
+        print(f"[fetch] Added {len(hosted_jobs)} jobs from company sources")
+
+    # Add SerpApi results if available
+    if serpapi_key and query:
+        print(f"[serpapi] Fetching jobs for query: {query}")
+        try:
+            serp_jobs = fetch_serpapi_google_jobs(
+                query=query,
+                location=location,
+                api_key=serpapi_key,
+                fetch_limit=int(resolved_cfg.get("fetch_limit", 200))
+            )
+            if serp_jobs:
+                fetched.extend(serp_jobs)
+                print(f"[serpapi] Found {len(serp_jobs)} jobs via SerpApi")
+        except Exception as e:
+            print(f"[serpapi] ⚠️ Error fetching from SerpApi: {e}")
+
     job_assets: dict[str, dict[str, Any]] = {}
 
     def _dedupe_by_url(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1352,11 +1374,16 @@ def main() -> None:
 
     # Free-source fetching removed; skip regardless of config.
 
-    fetched = load_jobs(jobs_arg, jobs_url_arg, here)
-    if isinstance(fetched, dict) and 'items' in fetched:
-        fetched = fetched['items']  # normalize
-    if not isinstance(fetched, list):
-        fetched = []
+    # Load pre-defined jobs if any
+    local_jobs = load_jobs(jobs_arg, jobs_url_arg, here)
+    if isinstance(local_jobs, dict) and 'items' in local_jobs:
+        local_jobs = local_jobs['items']
+    if isinstance(local_jobs, list):
+        fetched.extend(local_jobs)
+        print(f"[fetch] Added {len(local_jobs)} local/pre-defined jobs")
+
+    # Deduplicate and limit
+    fetched = _dedupe_by_url(fetched)
     fetched = fetched[: int(resolved_cfg.get("fetch_limit", 200))]
 
     # Optional Selenium fetch

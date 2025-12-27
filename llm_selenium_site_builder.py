@@ -22,10 +22,15 @@ except Exception:
 
 try:
     from openai import OpenAI
-except Exception as exc:  # pragma: no cover - only triggered if dependency missing
-    raise RuntimeError(
-        "The openai package is required for LLM Selenium site generation."
-    ) from exc
+    OPENAI_AVAILABLE = True
+except Exception:
+    OPENAI_AVAILABLE = False
+
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
 
 
 MODEL_NAME = os.getenv("LLM_SITES_MODEL", "gpt-4o-mini")
@@ -117,29 +122,53 @@ def generate_selenium_site_entries(companies: List[str]) -> List[Dict[str, Any]]
     if not companies:
         return []
 
-    client = OpenAI()
+    openai_key = os.getenv("OPENAI_API_KEY", "").strip()
+    gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+    provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    
+    if provider == "openai" and not openai_key:
+        if gemini_key:
+            provider = "gemini"
+            print("[llm-selenium] OpenAI key missing, falling back to Gemini")
+        else:
+            print("[llm-selenium] No LLM API keys found, skipping site generation")
+            return []
+            
     prompt = PROMPT_TEMPLATE.format(company_list="\n".join(f"- {c}" for c in companies))
-
-    try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
-                {"role": "system", "content": "You generate structured JSON for Selenium job scrapers."},
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.2,
-            max_tokens=1200,
-        )
-    except Exception as exc:
-        print(f"[llm-selenium] OpenAI request failed: {exc}")
+    raw_text = ""
+    
+    if provider == "openai":
+        try:
+            client = OpenAI(api_key=openai_key)
+            response = client.chat.completions.create(
+                model=MODEL_NAME,
+                messages=[
+                    {"role": "system", "content": "You generate structured JSON for Selenium job scrapers."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.2,
+                max_tokens=1200,
+            )
+            raw_text = response.choices[0].message.content or ""
+        except Exception as exc:
+            print(f"[llm-selenium] OpenAI request failed: {exc}")
+            return []
+    elif provider == "gemini":
+        if not GEMINI_AVAILABLE:
+            print("[llm-selenium] Gemini library not available")
+            return []
+        try:
+            genai.configure(api_key=gemini_key)
+            model = genai.GenerativeModel("gemini-1.5-flash")
+            response = model.generate_content(prompt)
+            raw_text = response.text or ""
+        except Exception as exc:
+            print(f"[llm-selenium] Gemini request failed: {exc}")
+            return []
+    else:
+        print(f"[llm-selenium] Unsupported provider: {provider}")
         return []
 
-    if not response.choices:
-        print("[llm-selenium] Empty response choices for site generation.")
-        return []
-
-    raw_text = response.choices[0].message.content or ""
-    raw_text = raw_text.strip()
     if not raw_text:
         print("[llm-selenium] Empty response content for site generation.")
         return []

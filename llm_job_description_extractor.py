@@ -16,6 +16,13 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 from dotenv import load_dotenv
 
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except Exception:
+    GEMINI_AVAILABLE = False
+    genai = None
+
 load_dotenv()
 
 
@@ -45,16 +52,32 @@ class JobDescriptionExtractor:
         ]
     }
     
-    def __init__(self, openai_api_key: Optional[str] = None):
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key required")
+    def __init__(self, api_key: Optional[str] = None):
+        openai_key = api_key or os.getenv("OPENAI_API_KEY")
+        gemini_key = api_key or os.getenv("GEMINI_API_KEY")
         
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=api_key,
-            temperature=0.3
-        )
+        self.provider = os.getenv("LLM_PROVIDER", "openai").lower()
+        if self.provider == "openai" and not openai_key:
+            if gemini_key:
+                self.provider = "gemini"
+            else:
+                raise ValueError("No LLM API keys found")
+        
+        if self.provider == "openai":
+            self.llm = ChatOpenAI(
+                model="gpt-4o-mini",
+                api_key=openai_key,
+                temperature=0.3
+            )
+            self.gemini_model = None
+        elif self.provider == "gemini":
+            if not GEMINI_AVAILABLE:
+                raise ValueError("google-generativeai package not available")
+            genai.configure(api_key=gemini_key)
+            self.gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+            self.llm = None
+        else:
+            raise ValueError(f"Unsupported provider: {self.provider}")
     
     @staticmethod
     def _clean_html(html_text: str) -> str:
@@ -191,14 +214,31 @@ Keep it concise and focus on the most important information.
         if role:
             context_hint += f"Role: {role}\n"
         
-        prompt = ChatPromptTemplate.from_template(template)
-        chain = prompt | self.llm | StrOutputParser()
+        if self.provider == "openai":
+            prompt = ChatPromptTemplate.from_template(template)
+            chain = prompt | self.llm | StrOutputParser()
+            
+            try:
+                result = chain.invoke({
+                    "content": context[:6000],  # Limit to avoid token issues
+                    "context_hint": context_hint
+                })
+            except Exception as e:
+                print(f"[extractor] OpenAI extraction failed: {e}")
+                raise
+        elif self.provider == "gemini":
+            prompt_text = template.format(
+                content=context[:8000],
+                context_hint=context_hint
+            )
+            try:
+                response = self.gemini_model.generate_content(prompt_text)
+                result = response.text or ""
+            except Exception as e:
+                print(f"[extractor] Gemini extraction failed: {e}")
+                raise
         
         try:
-            result = chain.invoke({
-                "content": context[:6000],  # Limit to avoid token issues
-                "context_hint": context_hint
-            })
             
             # Parse the result into a dict
             parsed = self._parse_llm_output(result)

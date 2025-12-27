@@ -9,7 +9,9 @@ from pathlib import Path
 from job_application_agent import JobApplicationAgent, AgentConfig
 # Import autofill classes
 from portal_autofill import SimpleGreenhouseAutofill, CandidateProfile, is_greenhouse_url, is_lever_url, SimpleLeverAutofill
-from workday_autofill import WorkdayAutofill, is_workday_url
+    # from workday_autofill import WorkdayAutofill, is_workday_url
+WorkdayAutofill = None
+is_workday_url = lambda x: False
 from selenium_scraper import create_chrome_driver
 
 def main():
@@ -80,7 +82,7 @@ Examples:
     agent_config = AgentConfig(
         resume_path=config_dict.get("resume", "input/resume.yml"),
         candidate_name=config_dict.get("cover_letter", {}).get("name", "Candidate"),
-        target_roles=args.roles or config_dict.get("companies", ["software engineer"]),
+        target_roles=args.roles or config_dict.get("target_roles", ["software engineer"]),
         target_companies=args.companies or config_dict.get("companies", []),
         max_jobs_to_fetch=config_dict.get("fetch_limit", 500),
         max_jobs_to_apply=args.max_jobs or config_dict.get("top", 15),
@@ -90,6 +92,7 @@ Examples:
         auto_submit=args.auto_submit or config_dict.get("autofill", {}).get("enabled", False),
         dry_run=args.dry_run,
         output_dir=args.output_dir or config_dict.get("output", {}).get("dir", "output"),
+        serpapi_api_key=config_dict.get("serpapi_key") or os.getenv("SERPAPI_KEY"),
         verbose=True
     )
     
