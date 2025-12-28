@@ -8,7 +8,7 @@
   "min_match_score": 25,
   "top_per_company": true,
   "top_per_company_limit": 10,
-  "parallel_workers": 5,
+  "parallel_workers": 20,
   "run_both": true,
   "selenium_only": false,
   "save_fetched": true,

@@ -1430,8 +1430,8 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
                 resume_skills.add(tok)
 
     general_terms = {
-        "python", "java", "javascript", "typescript",
-        "c", "c++", "c#", "sql", "shell", "bash",
+        "python", "java", "javascript", "typescript", "Django", "Flask"
+        "c", "c++", "c#", "sql", "shell", "bash", "SQL", "Databases", "database",  "Databricks", "data"
         "pytorch", "tensorflow", "keras", "scikit-learn", "pandas", "numpy",
         "aws", "azure", "gcp", "docker", "kubernetes", "jenkins", "terraform",
     }
@@ -1444,7 +1444,7 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
             fetched, 
             target_roles, 
             resume_skills,
-            max_workers=resolved_cfg.get("parallel_workers", 5)
+            max_workers=resolved_cfg.get("parallel_workers", 20)  # Increased from 5 to 20 for faster fetching
         )
     
     def score_single_job(job: dict[str, Any]) -> dict[str, Any]:
@@ -1454,7 +1454,7 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
     
     scored = []
     from concurrent.futures import ThreadPoolExecutor as Executor, as_completed
-    max_score_workers = min(int(resolved_cfg.get("parallel_workers", 5) or 5), len(fetched) or 1)
+    max_score_workers = min(int(resolved_cfg.get("parallel_workers", 20) or 20), len(fetched) or 1)  # Increased for faster scoring
     with Executor(max_workers=max_score_workers) as executor:
         future_to_job = {executor.submit(score_single_job, job): job for job in fetched}
         for future in as_completed(future_to_job):
