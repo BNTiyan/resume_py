@@ -228,35 +228,46 @@ class WordDocumentGenerator:
                     linkedin_para.runs[0].font.size = Pt(10)
                     linkedin_para.runs[0].font.color.rgb = RGBColor(80, 80, 80)
             
-            # Professional Summary (15 bullet points)
+            # Professional Summary (up to 15 bullet points)
             summary_added = False
-            for key in ['summary', 'professional_summary', 'objective']:
-                if key in sections_dict and sections_dict[key].strip():
-                    # Section header
-                    self._add_section_header(doc, "PROFESSIONAL SUMMARY")
+            summary_lines = []
+            
+            # 1. Try structured basics.summary first (from YAML or enhanced parser)
+            if structured and structured.get("basics", {}).get("summary"):
+                s_data = structured["basics"]["summary"]
+                if isinstance(s_data, list):
+                    summary_lines = s_data
+                else:
+                    summary_lines = [s_data]
+            
+            # 2. Fallback to sections_dict from parsed text
+            if not summary_lines:
+                for key in ['summary', 'professional_summary', 'objective']:
+                    if key in sections_dict and sections_dict[key].strip():
+                        summary_text = sections_dict[key]
+                        summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
+                        break
+            
+            if summary_lines:
+                # Section header
+                self._add_section_header(doc, "PROFESSIONAL SUMMARY")
+                bullet_count = 0
+                for line in summary_lines:
+                    # Skip section headers
+                    if line.isupper() and len(line) < 50 and any(kw in line.lower() for kw in ['summary', 'experience', 'education']):
+                        continue
                     
-                    summary_text = sections_dict[key]
-                    summary_lines = [l.strip() for l in summary_text.split('\n') if l.strip()]
-                    bullet_count = 0
-                    
-                    for line in summary_lines:
-                        # Skip section headers
-                        if line.isupper() and len(line) < 50:
-                            continue
-                        
-                        # Clean up the line
-                        clean_line = line.lstrip('•-*►▪→◆ ').strip()
-                        
-                        if clean_line and len(clean_line) > 20:
-                            self._add_bullet_point(doc, clean_line)
-                            bullet_count += 1
-                            if bullet_count >= 15:
-                                break
-                    
-                    if bullet_count > 0:
-                        summary_added = True
-                        doc.add_paragraph()  # Spacing
-                    break
+                    # Clean up the line
+                    clean_line = line.lstrip('•-*►▪→◆ ').strip()
+                    if clean_line and len(clean_line) > 10:
+                        self._add_bullet_point(doc, clean_line)
+                        bullet_count += 1
+                        if bullet_count >= 15:
+                            break
+                
+                if bullet_count > 0:
+                    summary_added = True
+                    doc.add_paragraph()  # Spacing
             
             # Default summary if none found
             if not summary_added:

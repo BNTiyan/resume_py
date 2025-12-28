@@ -147,15 +147,28 @@ def _extract_section(text: str, section_names: List[str]) -> str:
     lines = text.splitlines()
     current: List[str] = []
     capture = False
-    section_re = re.compile(r"^\s*(" + "|".join(re.escape(s) for s in section_names) + r")\b", re.IGNORECASE)
-    stop_re = re.compile(r"^\s*(skills|projects?|education|certifications?)\b", re.IGNORECASE)
+    # Look for section headers (at start of line, optionally followed by colon or separator)
+    pattern = r"^\s*(" + "|".join(re.escape(s) for s in section_names) + r")[:\s]*$"
+    section_re = re.compile(pattern, re.IGNORECASE)
+    
+    # Sections that typically signal the end of the current one
+    stop_patterns = ["skills", "projects", "education", "experience", "summary", "profile", "certifications", "achievements"]
+    stop_re = re.compile(r"^\s*(" + "|".join(stop_patterns) + r")[:\s]*$", re.IGNORECASE)
 
     for line in lines:
-        if not capture and section_re.search(line):
+        l = line.strip()
+        if not l:
+            if capture:
+                current.append(line)
+            continue
+            
+        if not capture and section_re.search(l):
             capture = True
             continue
+        
         if capture:
-            if stop_re.search(line):
+            # If we hit another section header, stop
+            if stop_re.search(l) and not section_re.search(l):
                 break
             current.append(line)
 
@@ -172,8 +185,11 @@ def parse_resume_text(text: str) -> Dict[str, Any]:
     if not text:
         return {"basics": {}, "skills": [], "raw_sections": {}}
 
-    basics = _extract_basics(text)
-    skills = _extract_skills(text)
+    raw_summary = _extract_section(text, ["summary", "professional summary", "profile", "executive summary", "objective"])
+    if raw_summary:
+        # Split into list of sentences/lines if it looks like paragraphs
+        summary_points = [p.strip() for p in re.split(r'\n|\. ', raw_summary) if p.strip()]
+        basics["summary"] = summary_points
 
     raw_sections = {
         "experience": _extract_section(text, ["experience", "work experience", "professional experience"]),

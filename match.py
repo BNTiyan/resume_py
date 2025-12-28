@@ -2005,21 +2005,13 @@ def main() -> None:
             
             # Parallel fetch job descriptions
             if filtered_jobs:
-                parallel_workers = int(resolved_cfg.get("parallel_workers", 5))
-                parallel_workers = min(parallel_workers, len(filtered_jobs))  # Don't create more workers than jobs
+                parallel_workers = int(resolved_cfg.get("parallel_workers", 12)) # Increased from 5
+                parallel_workers = min(parallel_workers, len(filtered_jobs))
                 print(f"[parallel] Pre-fetching job descriptions with {parallel_workers} workers...")
                 with ThreadPoolExecutor(max_workers=parallel_workers) as executor:
                     # Submit all jobs for parallel fetching
-                    future_to_idx = {executor.submit(fetch_job_desc, j): i for i, j in enumerate(filtered_jobs)}
-                    
-                    # Wait for all to complete and update the jobs list
-                    for future in as_completed(future_to_idx):
-                        idx = future_to_idx[future]
-                        try:
-                            updated_job = future.result()
-                            filtered_jobs[idx] = updated_job
-                        except Exception as e:
-                            print(f"  [parallel-fetch] Error processing job {idx}: {e}")
+                    futures = [executor.submit(fetch_job_desc, j) for j in filtered_jobs]
+                    filtered_jobs = [f.result() for f in as_completed(futures)]
                 
                 print(f"[parallel] Job description fetching complete!")
             
@@ -2034,11 +2026,14 @@ def main() -> None:
             resume_results = []
             job_assets = {} # Initialize as empty dict, will be populated per job
             
-            for idx, job_dict in enumerate(filtered_jobs, 1):
-                score = job_dict.get("score", 0)
-                company = _normalize_meta_field(job_dict.get("company"))
+            # FAST MODE: If we just want discovery results, we can skip heavy LLM/Selenium parsing
+            fast_mode = resolved_cfg.get("fast_discovery", True)
+            
+            for idx, j in enumerate(filtered_jobs, 1):
+                score = j.get("score", 0)
+                company = _normalize_meta_field(j.get("company"))
                 if not company:
-                    source = job_dict.get("source", "")
+                    source = j.get("source", "")
                     if ":" in source:
                         company = _normalize_meta_field(source.split(":")[-1].strip().title())
                         j["company"] = company
@@ -2063,9 +2058,17 @@ def main() -> None:
                 builder_tailored = builder
                 should_force_llm_resume = False
                 
+                # SPEED OPTIMIZATION: Skip deep parsing if we already have a description and are in fast mode
+                if fast_mode and jd_text and len(jd_text) > 200:
+                    print(f"  [speed] Skipping deep parsing for {company_label} (already have {len(jd_text)} chars)")
+                    assets["company"] = company
+                    assets["role"] = role
+                    continue # In discovery mode, we just want the list. Skip the rest of the loop for this job.
+
                 html_parsed_info = {}
                 if (
-                    job_url
+                    not jd_text # Only fetch if we don't have it
+                    and job_url
                     and LLM_JOB_HTML_PARSER_AVAILABLE
                     and use_openai
                     and openai_key

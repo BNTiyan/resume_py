@@ -103,17 +103,30 @@ def get_overlapping_skills(resume_data, job_description: str) -> list[str]:
     overlaps: list[str] = []
     seen: set[str] = set()
 
-    for group in resume_data.get("skills", []) or []:
-        for kw in group.get("keywords", []) or []:
-            skill = str(kw).strip()
-            if not skill:
-                continue
-            key = skill.lower()
-            if key in seen:
-                continue
-            if key in jd_lower:
-                overlaps.append(skill)
-                seen.add(key)
+    skills_source = resume_data.get("skills", []) or []
+    
+    # Handle both structured (list of dicts) and flat (list of strings) formats
+    all_keywords = []
+    for item in skills_source:
+        if isinstance(item, dict):
+            # YAML format: {"name": "...", "keywords": [...]}
+            all_keywords.extend(item.get("keywords", []) or [])
+        elif isinstance(item, str):
+            # Parsed format: just a string
+            all_keywords.append(item)
+
+    for kw in all_keywords:
+        skill = str(kw).strip()
+        if not skill:
+            continue
+        key = skill.lower()
+        if key in seen:
+            continue
+        # Use regex for word boundary matching to avoid partial hits like "ai" in "mail"
+        pattern = r'\b' + re.escape(key) + r'\b'
+        if re.search(pattern, jd_lower):
+            overlaps.append(skill)
+            seen.add(key)
 
     return overlaps
 
@@ -161,12 +174,16 @@ def build_fallback_cover_letter(resume_data, job_title: str, company_name: str, 
     """
     Non-LLM cover letter template with 2–3 relevant paragraphs.
     Uses:
-    - basics.summary from YAML
+    - basics.summary or first lines of work experience
     - overlapping skills between resume and JD
     """
     basics = resume_data.get("basics", {}) or {}
     name = basics.get("name", "")
     summary_list = basics.get("summary", []) or []
+    
+    # Fallback for summary if it's a string instead of a list
+    if isinstance(summary_list, str):
+        summary_list = [summary_list]
 
     overlaps = get_overlapping_skills(resume_data, job_description)
     top_skills = overlaps[:4]
@@ -174,15 +191,27 @@ def build_fallback_cover_letter(resume_data, job_title: str, company_name: str, 
     paragraphs: list[str] = []
 
     # Paragraph 1: interest + role/company
-    p1 = f"I am very interested in the {job_title} role at {company_name} and believe my background is a strong match for your needs."
+    p1 = f"I am writing to express my strong interest in the {job_title} position at {company_name}. With my professional background and technical expertise, I am confident that I can contribute significantly to your team's success."
     paragraphs.append(p1)
 
-    # Paragraph 2: core profile from summary
+    # Paragraph 2: core profile from summary or work history
+    p2_content = ""
     if summary_list:
-        core_points = " ".join(summary_list[:2])
+        p2_content = " ".join(summary_list[:2])
+    else:
+        # If no summary, try to use first work entry
+        work = resume_data.get("work", []) or []
+        if work and isinstance(work[0], dict):
+            recent = work[0]
+            pos = recent.get("position", "")
+            comp = recent.get("company", "")
+            if pos and comp:
+                p2_content = f"I most recently served as a {pos} at {comp}, where I focused on high-impact engineering projects and robust system development."
+    
+    if p2_content:
         p2 = (
-            "Over my recent roles, I have focused on building reliable, production-ready systems. "
-            f"{core_points}"
+            "Throughout my career, I have consistently focused on building reliable, performant, and scalable solutions. "
+            f"{p2_content}"
         )
         paragraphs.append(p2)
 
@@ -196,16 +225,15 @@ def build_fallback_cover_letter(resume_data, job_title: str, company_name: str, 
             skills_phrase = ", ".join(top_skills[:-1]) + f", and {top_skills[-1]}"
 
         p3 = (
-            f"For this position, I bring hands-on experience with {skills_phrase}, "
-            "which directly aligns with the technologies and responsibilities highlighted in the job description. "
-            "I have applied these skills in real projects to deliver measurable impact and improve engineering workflows."
+            f"My specific experience with {skills_phrase} allows me to hit the ground running and add value to {company_name} from day one. "
+            "I am passionate about applying these technologies to solve complex problems and improve overall system quality."
         )
         paragraphs.append(p3)
 
     # Final paragraph: closing
     closing = (
-        "Thank you for your time and consideration. I would welcome the opportunity to discuss how my background "
-        "can help your team deliver high-quality, scalable solutions."
+        "I look forward to the possibility of discussing my application with you further. "
+        "Thank you for your time and consideration."
     )
     paragraphs.append(closing)
 
@@ -305,6 +333,11 @@ def generate_documents(
     basics_override: dict | None = None,
 ):
     """Generate resume and cover letter"""
+    # Apply basics overlap/override early to resume_data
+    if basics_override and "basics" in resume_data:
+        resume_data["basics"] = {**resume_data["basics"], **basics_override}
+    elif basics_override:
+        resume_data["basics"] = basics_override
     try:
         # Convert resume to text (base content). If a user-uploaded resume
         # was provided, prefer that text as the base; otherwise use YAML.
@@ -358,6 +391,11 @@ def generate_documents(
                 company_name=company_name,
                 job_description=job_description,
             )
+        else:
+            # If LLM generated it, ensure it has a closing if missing
+            if not any(kw in cover_letter.lower() for kw in ["sincerely", "best regards", "thank you"]):
+                name = resume_data.get("basics", {}).get("name", "")
+                cover_letter += f"\n\nSincerely,\n\n{name}"
         # Heuristic, non-LLM booster: append a "Relevant Skills" section based
         # on overlaps between your YAML skills and the job description.
         overlaps_for_section = get_overlapping_skills(resume_data, job_description)
@@ -386,11 +424,8 @@ def generate_documents(
         cover_pdf = output_dir / f"{base_name}_cover_letter.pdf"
         cover_docx = output_dir / f"{base_name}_cover_letter.docx"
         
-        # Generate PDFs and DOCX files
+        # Use final merged basics for document headers
         basics = resume_data.get("basics", {}) or {}
-        if basics_override:
-            # Uploaded resume basics override YAML basics for this request
-            basics = {**basics, **(basics_override or {})}
         candidate_name = basics.get("name", "")
         candidate_email = basics.get("email", "")
         candidate_phone = basics.get("phone", "")
@@ -544,9 +579,9 @@ def generate():
         
         # Use defaults if still missing
         if not company_name:
-            company_name = "Company"
+            company_name = "Target Company"
         if not job_title:
-            job_title = "Position"
+            job_title = "Desired Role"
         
         # Generate documents (using YAML-based resume as base)
         result, error = generate_documents(
@@ -591,6 +626,11 @@ def discover():
         # Load configuration
         config = load_config() or {}
         resolved_cfg = resolve_from_config(config)
+        
+        # SPEED OPTIMIZATION: Ensure fast mode is on for web-based discovery
+        resolved_cfg["fast_discovery"] = True
+        # Also ensure we use a healthy amount of workers for background fetching
+        resolved_cfg["parallel_workers"] = 15
         
         resume_text = None
         resume_structured = None
@@ -733,22 +773,7 @@ def generate_with_resume():
                 'error': 'Configuration not found (config.json)'
             }), 500
 
-        # Load YAML resume for structured data (name, sections, etc.)
-        resume_path = Path("input/resume.yml")
-        if not resume_path.exists():
-            return jsonify({
-                'success': False,
-                'error': 'Resume file not found (input/resume.yml)'
-            }), 500
-
-        _, resume_data = load_resume_data(resume_path)
-        if not resume_data:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to load resume data'
-            }), 500
-
-        # Save uploaded resume to disk
+        # Try to parse the uploaded resume first
         upload_dir = Path(app.config['UPLOAD_FOLDER'])
         upload_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -756,9 +781,28 @@ def generate_with_resume():
         saved_path = upload_dir / f"{timestamp}_{safe_name}"
         resume_file.save(str(saved_path))
 
-        # Extract text + basics from uploaded resume using shared parser util.
+        # Extract text + basics from uploaded resume
         parsed = parse_resume_file(saved_path)
         base_resume_text = extract_text_from_resume_file(saved_path)
+
+        # Use parsed data from uploaded resume as primary resume_data
+        # Fallback to input/resume.yml for sections we might have missed or if parsing failed
+        resume_path = Path("input/resume.yml")
+        fallback_data = None
+        if resume_path.exists():
+            _, fallback_data = load_resume_data(resume_path)
+
+        # Merge or prioritize uploaded data:
+        # If the uploaded resume has at least some work history entries, prioritize it.
+        if parsed and parsed.get("work") and len(parsed.get("work", [])) > 0:
+            resume_data = parsed
+            print(f"[api] Prioritizing uploaded resume data: found {len(parsed['work'])} work history entries")
+        elif fallback_data:
+            resume_data = fallback_data
+            print("[api] Uploaded resume has no work history, falling back to input.yml")
+        else:
+            resume_data = parsed or {}
+            print("[api] No work history found in upload or input.yml")
 
         # If URL provided but no JD text, fetch it
         if job_link and not job_description:
@@ -779,9 +823,9 @@ def generate_with_resume():
                 job_title = auto_title
 
         if not company_name:
-            company_name = "Company"
+            company_name = "Target Company"
         if not job_title:
-            job_title = "Position"
+            job_title = "Desired Role"
 
         # Generate documents using the uploaded resume text as the base content
         # (for scoring and tailoring), but keep YAML resume_data for any

@@ -679,12 +679,14 @@ r45        Generate a professional 3-page resume PDF
                     story.append(Paragraph(para, self.styles['BodyText']))
                 story.append(Spacer(1, 0.15*inch))
             
-            # Closing
-            story.append(Spacer(1, 0.2*inch))
-            story.append(Paragraph("Sincerely,", self.styles['Normal']))
-            story.append(Spacer(1, 0.1*inch))
-            if candidate_name:
-                story.append(Paragraph(candidate_name, self.styles['Normal']))
+            # Closing (only add if not detected in body)
+            has_explicit_closing = any(p.lower().startswith(('sincerely', 'best regards', 'thank you for your time')) for p in paragraphs[-2:])
+            if not has_explicit_closing:
+                story.append(Spacer(1, 0.2*inch))
+                story.append(Paragraph("Sincerely,", self.styles['Normal']))
+                story.append(Spacer(1, 0.1*inch))
+                if candidate_name:
+                    story.append(Paragraph(candidate_name, self.styles['Normal']))
             
             # Build PDF
             doc.build(story)
