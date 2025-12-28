@@ -1,54 +1,54 @@
-name: Lever & Greenhouse Pipeline
+# name: Lever & Greenhouse Pipeline
 
-on:
-  # schedule:
-  #   # Run daily at 10 AM UTC
-  #   - cron: '0 10 * * *'
-  workflow_dispatch:
+# on:
+#   # schedule:
+#   #   # Run daily at 10 AM UTC
+#   #   - cron: '0 10 * * *'
+#   workflow_dispatch:
 
-jobs:
-  hosted-boards:
-    runs-on: ubuntu-latest
+# jobs:
+#   hosted-boards:
+#     runs-on: ubuntu-latest
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.11'
+#           cache: 'pip'
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements.txt
+#       - name: Install dependencies
+#         run: |
+#           pip install -r requirements.txt
 
-      - name: Install Playwright browsers
-        run: |
-          python -m playwright install chromium
-          python -m playwright install-deps chromium
+#       - name: Install Playwright browsers
+#         run: |
+#           python -m playwright install chromium
+#           python -m playwright install-deps chromium
 
-      - name: Set up environment variables
-        run: |
-          echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
-          if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
-            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
-          fi
-          echo "GEMINI_RESUME_MODEL=gemini-2.5-flash" >> $GITHUB_ENV
+#       - name: Set up environment variables
+#         run: |
+#           echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> $GITHUB_ENV
+#           if [ -n "${{ secrets.GEMINI_API_KEY }}" ]; then
+#             echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> $GITHUB_ENV
+#           fi
+#           echo "GEMINI_RESUME_MODEL=gemini-2.5-flash" >> $GITHUB_ENV
 
-      - name: Run Lever/Greenhouse pipeline
-        run: |
-          python apply_greenhouse_lever.py --config config.greenhouse.json
+#       - name: Run Lever/Greenhouse pipeline
+#         run: |
+#           python apply_greenhouse_lever.py --config config.greenhouse.json
 
-      - name: Upload generated applications
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: lever-greenhouse-output
-          path: |
-            output/
-            tailored_resumes/
-            cover_letters/
-          retention-days: 30
+#       - name: Upload generated applications
+#         uses: actions/upload-artifact@v4
+#         if: always()
+#         with:
+#           name: lever-greenhouse-output
+#           path: |
+#             output/
+#             tailored_resumes/
+#             cover_letters/
+#           retention-days: 30
 

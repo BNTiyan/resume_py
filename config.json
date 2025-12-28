@@ -2,6 +2,7 @@
   "resume": "input/resume.yml",
   "top": 200,
   "country": "usa",
+  "job_type": "full-time",
   "fetch_limit": 200,
   "min_score": 25,
   "min_match_score": 25,

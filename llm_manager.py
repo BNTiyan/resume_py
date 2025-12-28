@@ -5,6 +5,7 @@ Default Priority: Gemini (free, cloud) > Ollama (free, local) > OpenAI (paid, di
 
 import os
 import sys
+import time
 
 # Determine which LLM to use based on environment
 LLM_PROVIDER = os.getenv('LLM_PROVIDER', 'auto')  # 'auto', 'gemini', 'ollama', 'openai'
@@ -123,8 +124,8 @@ class LLMManager:
                 print("  Get key: https://platform.openai.com/api-keys")
         return False
     
-    def generate(self, messages, temperature=0.7, max_tokens=6000):
-        """Generate response from LLM"""
+    def generate(self, messages, temperature=0.7, max_tokens=6000, max_retries=3):
+        """Generate response from LLM with retry logic for rate limits"""
         if not self.client:
             raise Exception("No LLM provider available")
 
@@ -136,32 +137,55 @@ class LLMManager:
             # Single dict -> wrap in list
             messages = [messages]
 
-        try:
-            # Primary generation path based on current provider
-            if self.provider == 'ollama':
-                return self._generate_ollama(messages, temperature, max_tokens)
-            elif self.provider == 'gemini':
-                return self._generate_gemini(messages, temperature, max_tokens)
-            elif self.provider == 'openai':
-                return self._generate_openai(messages, temperature, max_tokens)
-        except Exception as e:
-            # If Gemini fails at runtime (invalid key, model 404, quota, etc.),
-            # attempt transparent fallback to the next providers.
-            if self.provider == 'gemini':
-                print("\n⚠️  Gemini generation failed, attempting fallback to other providers:")
-                print(f"   Error: {e}\n")
+        # Retry loop with exponential backoff
+        for attempt in range(max_retries):
+            try:
+                # Primary generation path based on current provider
+                if self.provider == 'ollama':
+                    return self._generate_ollama(messages, temperature, max_tokens)
+                elif self.provider == 'gemini':
+                    return self._generate_gemini(messages, temperature, max_tokens)
+                elif self.provider == 'openai':
+                    return self._generate_openai(messages, temperature, max_tokens)
+                    
+            except Exception as e:
+                error_str = str(e).lower()
+                
+                # Check if it's a rate limit error
+                is_rate_limit = any(phrase in error_str for phrase in [
+                    'rate limit', 'quota', '429', 'too many requests', 
+                    'resource_exhausted', 'resourceexhausted'
+                ])
+                
+                if is_rate_limit and attempt < max_retries - 1:
+                    # Exponential backoff: 2^attempt seconds (2s, 4s, 8s)
+                    wait_time = 2 ** (attempt + 1)
+                    print(f"⚠️  Rate limit hit on {self.provider}. Retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                    time.sleep(wait_time)
+                    continue
+                
+                # If Gemini fails (rate limit exhausted or other error), try fallback
+                if self.provider == 'gemini':
+                    print(f"\n⚠️  Gemini failure: {e}")
+                    if is_rate_limit:
+                        print("   Gemini quota exhausted. Trying fallback providers...")
+                    else:
+                        print("   Attempting fallback to other providers...\n")
 
-                # Clear current client and try other providers in priority order
-                self.client = None
-                self.provider = None
+                    # Clear current client and try other providers
+                    self.client = None
+                    self.provider = None
 
-                # Try Ollama first (if available), then OpenAI
-                if self._try_ollama() or self._try_openai():
-                    # Recursive call will use the new provider
-                    return self.generate(messages, temperature, max_tokens)
+                    # Try Ollama first (unlimited), then OpenAI
+                    if self._try_ollama() or self._try_openai():
+                        # Recursive call will use the new provider
+                        return self.generate(messages, temperature, max_tokens, max_retries)
 
-            # If not Gemini, or no fallback succeeded, re-raise the original error
-            raise
+                # If not Gemini, or no fallback succeeded, re-raise
+                raise
+        
+        # If we exhausted all retries
+        raise Exception(f"Failed to generate after {max_retries} attempts due to rate limits")
     
     def _generate_ollama(self, messages, temperature, max_tokens):
         """Generate with Ollama"""

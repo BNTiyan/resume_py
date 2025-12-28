@@ -1,41 +1,41 @@
-name: daily-autofill
+# name: daily-autofill
 
-#on:
-  #workflow_dispatch:
-  #schedule:
-  #  - cron: "0 12 * * *"
+# #on:
+#   #workflow_dispatch:
+#   #schedule:
+#   #  - cron: "0 12 * * *"
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+# jobs:
+#   run:
+#     runs-on: ubuntu-latest
+#     steps:
+#       - name: Checkout
+#         uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+#       - name: Setup Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: "3.11"
 
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          # Optional: install browser for JS-rendered pages; ignore failures
-          python -m playwright install chromium || true
+#       - name: Install dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+#           # Optional: install browser for JS-rendered pages; ignore failures
+#           python -m playwright install chromium || true
 
-      - name: Run daily autofill
-        env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: |
-          python match.py --config config.autofill.json
+#       - name: Run daily autofill
+#         env:
+#           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+#           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+#         run: |
+#           python match.py --config config.autofill.json
 
-      - name: Upload output
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: autofill-output
-          path: |
-            output/
+#       - name: Upload output
+#         if: always()
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: autofill-output
+#           path: |
+#             output/
 

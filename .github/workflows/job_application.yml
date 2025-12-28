@@ -1,63 +1,63 @@
-name: Job Application Pipeline
+# name: Job Application Pipeline
 
-# on:
-#   workflow_dispatch:  # Allows manual triggering from GitHub UI
-#   schedule:
-#     - cron: '0 13 * * 1-5'  # Runs at 13:00 UTC (approx 9 AM EST) Mon-Fri
+# # on:
+# #   workflow_dispatch:  # Allows manual triggering from GitHub UI
+# #   schedule:
+# #     - cron: '0 13 * * 1-5'  # Runs at 13:00 UTC (approx 9 AM EST) Mon-Fri
 
-jobs:
-  apply-jobs:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
+# jobs:
+#   apply-jobs:
+#     runs-on: ubuntu-latest
+#     permissions:
+#       contents: read
     
 
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+#     steps:
+#       - name: Checkout code
+#         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+#       - name: Set up Python
+#         uses: actions/setup-python@v5
+#         with:
+#           python-version: '3.11'
+#           cache: 'pip'
 
-      - name: Install Chrome Browser
-        uses: browser-actions/setup-chrome@v1
-        with:
-          chrome-version: stable
+#       - name: Install Chrome Browser
+#         uses: browser-actions/setup-chrome@v1
+#         with:
+#           chrome-version: stable
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          # Ensure critical packages for automation are present
-          pip install selenium webdriver-manager
+#       - name: Install Dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -r requirements.txt
+#           # Ensure critical packages for automation are present
+#           pip install selenium webdriver-manager
 
-      - name: Run Job Application Agent
-        env:
-          # Secrets must be configured in GitHub Repository Settings -> Secrets and variables -> Actions
-          WORKDAY_EMAIL: ${{ secrets.WORKDAY_EMAIL }}
-          WORKDAY_PASSWORD: ${{ secrets.WORKDAY_PASSWORD }}
-          WORKDAY_PASSWORD_SECONDARY: ${{ secrets.WORKDAY_PASSWORD_SECONDARY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          # Optional: Add other keys if you use them
-          # SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-        run: |
-          # Run the agent with auto-submit enabled
-          # The config.json is used by default as per agent_cli.py
-          python agent_cli.py --config config.json --auto-submit
+#       - name: Run Job Application Agent
+#         env:
+#           # Secrets must be configured in GitHub Repository Settings -> Secrets and variables -> Actions
+#           WORKDAY_EMAIL: ${{ secrets.WORKDAY_EMAIL }}
+#           WORKDAY_PASSWORD: ${{ secrets.WORKDAY_PASSWORD }}
+#           WORKDAY_PASSWORD_SECONDARY: ${{ secrets.WORKDAY_PASSWORD_SECONDARY }}
+#           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+#           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+#           # Optional: Add other keys if you use them
+#           # SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+#         run: |
+#           # Run the agent with auto-submit enabled
+#           # The config.json is used by default as per agent_cli.py
+#           python agent_cli.py --config config.json --auto-submit
 
-      - name: Upload Execution Logs & Generated Materials
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: application-data
-          path: |
-            output/
-            execution.log
-            agent_results.json
-          retention-days: 7
+#       - name: Upload Execution Logs & Generated Materials
+#         if: always()
+#         uses: actions/upload-artifact@v4
+#         with:
+#           name: application-data
+#           path: |
+#             output/
+#             execution.log
+#             agent_results.json
+#           retention-days: 7
 

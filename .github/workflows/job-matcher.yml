@@ -10,7 +10,7 @@ on:
         description: Path to matcher config JSON
         required: false
         type: string
-        default: config.json
+        default: config.ci.json
 
 permissions:
   contents: read
@@ -22,7 +22,7 @@ concurrency:
 jobs:
   match-jobs:
     runs-on: ubuntu-latest
-    timeout-minutes: 70  # Allow up to 70 minutes to exceed inner step timeout
+    timeout-minutes: 35  # Allow up to 35 minutes to exceed inner step timeout
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -45,7 +45,7 @@ jobs:
           chrome-version: stable
 
       - name: Run matcher with config
-        timeout-minutes: 60  # Timeout after 60 minutes
+        timeout-minutes: 30  # Timeout after 30 minutes (CI-optimized)
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -64,12 +64,12 @@ jobs:
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
               echo ""
-              echo "❌ ERROR: Process timed out after 60 minutes!"
+              echo "❌ ERROR: Process timed out after 30 minutes!"
               echo "This usually means:"
-              echo "  - Too many jobs to process"
-              echo "  - Selenium pages taking too long to load"
-              echo "  - LLM calls are slow or hanging"
-              echo "  - Network issues fetching job descriptions"
+              echo "  - Too many companies in config (reduce to 5-10 for CI)"
+              echo "  - Selenium pages taking too long (check selectors)"
+              echo "  - Network issues (GitHub Actions can be slow)"
+              echo "  - Use config.ci.json for faster CI runs"
               exit 1
             else
               exit $EXIT_CODE

@@ -191,6 +191,20 @@ def tokenize_for_fuzz(text: str) -> str:
     return " ".join(t for t in text.split() if len(t) > 1)
 
 
+# Common stopwords to exclude from skill extraction
+STOPWORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "for", "from", "has", "he",
+    "in", "is", "it", "its", "of", "on", "that", "the", "to", "was", "will", "with",
+    "this", "but", "they", "have", "had", "what", "when", "where", "who", "which",
+    "or", "not", "can", "all", "would", "there", "their", "been", "has", "have",
+    "had", "were", "we", "you", "your", "my", "me", "am", "do", "does", "did",
+    "if", "so", "than", "then", "how", "about", "into", "through", "during",
+    "before", "after", "above", "below", "up", "down", "out", "off", "over",
+    "under", "again", "further", "once", "here", "both", "each", "few", "more",
+    "most", "other", "some", "such", "only", "own", "same", "too", "very"
+}
+
+
 def build_query_from_resume(resume_text: str, max_terms: int = 12) -> str:
     """
     Automatically derive a search query from the resume text, without requiring
@@ -278,6 +292,50 @@ def _matches_country(location_value: str | None, country: str | None) -> bool:
     return any(alias in loc for alias in aliases)
 
 
+def _matches_job_type(description: str | None, title: str | None, required_type: str | None) -> bool:
+    """
+    Check if job description or title matches the required job type (e.g., 'full-time').
+    If required_type is None/empty, return True.
+    If 'full-time' is requested, we look for 'full-time', 'full time', or 'fulltime'.
+    We also aggressively filter OUT 'part-time', 'contract', 'freelance' if specifically looking for full-time.
+    """
+    if not required_type:
+        return True
+    
+    req = required_type.strip().lower()
+    if req not in ["full-time", "fulltime", "part-time", "contract"]:
+        return True # logic only supports these for now
+        
+    text_to_check = (str(description or "") + " " + str(title or "")).lower()
+    
+    is_full_time_request = req in ["full-time", "fulltime"]
+    
+    # Negative filtering for full-time
+    if is_full_time_request:
+        # Check for part-time patterns
+        part_time_patterns = ["part-time", "part time", "parttime"]
+        if any(pattern in text_to_check for pattern in part_time_patterns):
+            # If explicitly mentions part-time in title, likely not what we want
+            if title and any(pattern in title.lower() for pattern in part_time_patterns):
+                return False
+        
+        # Check for contract patterns (but allow "contract to full-time" or "contract to hire")
+        contract_patterns = ["contract", "freelance", "temp", "temporary"]
+        full_time_patterns = ["full-time", "full time", "fulltime", "permanent"]
+        
+        has_contract = any(pattern in text_to_check for pattern in contract_patterns)
+        has_fulltime = any(pattern in text_to_check for pattern in full_time_patterns)
+        
+        # If it mentions contract but NOT any full-time pattern, likely contract-only
+        if has_contract and not has_fulltime:
+            if title and any(pattern in title.lower() for pattern in contract_patterns):
+                return False
+        
+        # Positive signal: if we see explicit full-time patterns, definitely include
+        # Otherwise, default to True (most jobs don't explicitly state the type)
+        return True
+
+    return True
 def load_jobs(local: str | None, url: str | None, here: Path) -> list[dict[str, Any]]:
     if local:
         with open(local, "r", encoding="utf-8") as f:
@@ -1281,6 +1339,52 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
     if country:
         fetched = [j for j in fetched if _matches_country(j.get("location"), country)]
 
+    # Job Type filter (new)
+    job_type_filter = resolved_cfg.get("job_type")
+    if job_type_filter:
+        print(f"[filter] Applying job type filter: {job_type_filter}")
+        pre_count = len(fetched)
+        fetched = [
+            j for j in fetched 
+            if _matches_job_type(j.get("description"), j.get("title"), job_type_filter)
+        ]
+        print(f"[filter] Filtered from {pre_count} to {len(fetched)} jobs")
+
+    # Filter out invalid job titles (UI elements being scraped)
+    invalid_title_patterns = [
+        "job at", "apply now", "here", "clear filters", "saved jobs", "search jobs",
+        "create alert", "returning user", "login", "career site", "talent network",
+        "learn more", "read more", "view all", "see all", "internal career"
+    ]
+    pre_invalid = len(fetched)
+    fetched = [
+        j for j in fetched
+        if j.get("title") and not any(
+            pattern in j.get("title", "").lower()
+            for pattern in invalid_title_patterns
+        )
+    ]
+    if pre_invalid > len(fetched):
+        print(f"[filter] Removed {pre_invalid - len(fetched)} invalid job titles (UI elements)")
+
+    # Filter out non-technical/retail roles
+    non_technical_patterns = [
+        "cashier", "clerk", "sales associate", "merchandising", "retail", "stocker",
+        "customer service rep", "front desk", "receptionist", "administrative assistant",
+        "warehouse", "delivery driver", "driver", "janitor", "custodian",
+        "store manager", "shift supervisor", "shift lead"
+    ]
+    pre_non_tech = len(fetched)
+    fetched = [
+        j for j in fetched
+        if not any(
+            pattern in j.get("title", "").lower()
+            for pattern in non_technical_patterns
+        )
+    ]
+    if pre_non_tech > len(fetched):
+        print(f"[filter] Removed {pre_non_tech - len(fetched)} non-technical/retail positions")
+
     # Enrich jobs
     target_roles = resolved_cfg.get("target_roles", [])
     resume_skills: set[str] = set()
@@ -1292,7 +1396,9 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
                     for kw in group.get("keywords") or []:
                         if kw:
                             for tok in tokenize_for_fuzz(str(kw)).split():
-                                resume_skills.add(tok)
+                                # Filter out stopwords (prepositions, articles, etc.)
+                                if tok not in STOPWORDS:
+                                    resume_skills.add(tok)
         work_entries = resume_structured.get("work") or []
         if isinstance(work_entries, list):
             for job in work_entries:
@@ -1300,7 +1406,9 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
                     for tech in job.get("technologies") or []:
                         if tech:
                             for tok in tokenize_for_fuzz(str(tech)).split():
-                                resume_skills.add(tok)
+                                # Filter out stopwords
+                                if tok not in STOPWORDS:
+                                    resume_skills.add(tok)
 
     resume_lower = resume_text.lower()
     automotive_terms = {
@@ -1357,6 +1465,14 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
                 scored.append({**job, "score": 0.0, "country": ""})
     
     scored.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Apply min_score filter
+    min_score_threshold = float(resolved_cfg.get("min_score", 25))
+    pre_filter_count = len(scored)
+    scored = [j for j in scored if j.get("score", 0) >= min_score_threshold]
+    if pre_filter_count > len(scored):
+        print(f"[filter] Removed {pre_filter_count - len(scored)} jobs below min_score threshold ({min_score_threshold})")
+    
     top_n = int(resolved_cfg.get("top", 10))
     return scored, scored[:top_n]
 
