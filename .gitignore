@@ -1,3 +1,12 @@
 output/*
 .selenium-cache/
-__pycache__
+.wdm/
+__pycache__/
+*.log
+.DS_Store
+.vev/
+.env
+node_modules/
+dist/
+build/
+.antigravity/
