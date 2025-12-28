@@ -39,41 +39,22 @@ heroku config:set OPENAI_API_KEY=your_openai_key
 heroku config:set SERPAPI_KEY=your_serpapi_key
 ```
 
-## 6. Deploying via Heroku Dashboard (Step-by-Step)
-If you prefer identifying and clicking through the UI:
+## 6. Deploy
+### Option A: From local machine
+```bash
+git add .
+git commit -m "Prepare for Heroku deployment"
+git push heroku main
+```
 
-### A. Create the App
-1. Log in to [dashboard.heroku.com](https://dashboard.heroku.com/).
-2. Click **New** -> **Create new app**.
-3. Name your app (e.g., `quick-apply-agent`) and click **Create app**.
-
-### B. Connect to GitHub
-1. Go to the **Deploy** tab in your app's dashboard.
-2. Select **GitHub** as the deployment method.
-3. Search for your repository name and click **Connect**.
-
-### C. Configure Buildpacks (UI Method)
-1. Go to the **Settings** tab.
-2. Scroll down to the **Buildpacks** section.
-3. Click **Add buildpack** and add these in order:
-   - `heroku/python`
-   - `https://github.com/heroku/heroku-buildpack-google-chrome`
-   - `https://github.com/heroku/heroku-buildpack-chromedriver`
-
-### D. Set Config Vars (UI Method)
-1. Still in the **Settings** tab, click **Reveal Config Vars**.
-2. Add your keys:
-   - `GEMINI_API_KEY`: your_key_here
-   - `LLM_PROVIDER`: `gemini`
-   - `SERPAPI_KEY`: your_key_here (optional)
-
-### E. Manual Deploy
-1. Go back to the **Deploy** tab.
-2. Scroll to the bottom and click **Deploy Branch** (ensure `main` is selected).
-3. Wait for the build to finish.
+### Option B: From GitHub (Recommended)
+1. Go to your app in the [Heroku Dashboard](https://dashboard.heroku.com/).
+2. Navigate to **Deploy** tab.
+3. Select **GitHub** as the deployment method.
+4. Connect your repository and click **Deploy Branch**.
 
 ## 7. Verify Deployment
-Once the build is complete, click **Open App** at the top right of the dashboard.
+Once deployed, click **Open App** in Heroku.
 You can monitor logs using:
 ```bash
 heroku logs --tail
