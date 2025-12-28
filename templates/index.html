@@ -743,41 +743,78 @@
 
                 const data = await response.json();
 
-                if (data.success) {
-                    const jobs = data.jobs;
-                    const tbody = document.getElementById('jobsTableBody');
-                    tbody.innerHTML = '';
+                if (data.success && data.task_id) {
+                    const taskId = data.task_id;
+                    let attempts = 0;
+                    const maxAttempts = 60; // 2 minutes with 2s interval
 
-                    if (jobs.length === 0) {
-                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No jobs found. Try updating your resume keywords.</td></tr>';
-                    } else {
-                        jobs.forEach(job => {
-                            const tr = document.createElement('tr');
-                            tr.style.borderBottom = '1px solid #eee';
+                    const pollStatus = async () => {
+                        try {
+                            const statusResponse = await fetch(`/api/discovery_status/${taskId}`);
+                            const statusData = await statusResponse.json();
 
-                            const scoreColor = job.score >= 70 ? '#28a745' : (job.score >= 50 ? '#ffc107' : '#dc3545');
+                            if (statusData.status === 'completed') {
+                                displayJobs(statusData.jobs);
+                                btn.disabled = false;
+                                btn.textContent = originalText;
+                            } else if (statusData.status === 'failed') {
+                                showError(statusData.error || 'Discovery failed');
+                                btn.disabled = false;
+                                btn.textContent = originalText;
+                            } else if (attempts >= maxAttempts) {
+                                showError('Discovery timed out. Please try again or check the server logs.');
+                                btn.disabled = false;
+                                btn.textContent = originalText;
+                            } else {
+                                attempts++;
+                                btn.textContent = `Searching... (${attempts * 2}s)`;
+                                setTimeout(pollStatus, 2000);
+                            }
+                        } catch (err) {
+                            showError('Error checking status: ' + err.message);
+                            btn.disabled = false;
+                            btn.textContent = originalText;
+                        }
+                    };
 
-                            tr.innerHTML = `
-                                <td style="padding: 12px; font-weight: bold; color: ${scoreColor}">${job.score}%</td>
-                                <td style="padding: 12px;">${job.title}</td>
-                                <td style="padding: 12px;">${job.company}</td>
-                                <td style="padding: 12px;">
-                                    <button onclick="applyToDiscoveredJob('${btoa(JSON.stringify(job))}')" class="btn" style="padding: 5px 10px; font-size: 12px; width: auto; background: #28a745;">Apply</button>
-                                </td>
-                            `;
-                            tbody.appendChild(tr);
-                        });
-                    }
-                    document.getElementById('discoveredJobsList').style.display = 'block';
+                    setTimeout(pollStatus, 2000);
                 } else {
-                    showError(data.error || 'Failed to discover jobs');
+                    showError(data.error || 'Failed to initiate discovery');
+                    btn.disabled = false;
+                    btn.textContent = originalText;
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);
-            } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
+        }
+
+        function displayJobs(jobs) {
+            const tbody = document.getElementById('jobsTableBody');
+            tbody.innerHTML = '';
+
+            if (jobs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No jobs found. Try updating your resume keywords.</td></tr>';
+            } else {
+                jobs.forEach(job => {
+                    const tr = document.createElement('tr');
+                    tr.style.borderBottom = '1px solid #eee';
+
+                    const scoreColor = job.score >= 70 ? '#28a745' : (job.score >= 50 ? '#ffc107' : '#dc3545');
+
+                    tr.innerHTML = `
+                        <td style="padding: 12px; font-weight: bold; color: ${scoreColor}">${job.score}%</td>
+                        <td style="padding: 12px;">${job.title}</td>
+                        <td style="padding: 12px;">${job.company}</td>
+                        <td style="padding: 12px;">
+                            <button onclick="applyToDiscoveredJob('${btoa(JSON.stringify(job))}')" class="btn" style="padding: 5px 10px; font-size: 12px; width: auto; background: #28a745;">Apply</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+            document.getElementById('discoveredJobsList').style.display = 'block';
         }
 
         function applyToDiscoveredJob(jobBase64) {

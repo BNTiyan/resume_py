@@ -31,6 +31,9 @@ from resume_parser import parse_resume_file
 import re
 from docx import Document as DocxDocument
 from PyPDF2 import PdfReader
+import threading
+import uuid
+import time
 
 app = Flask(__name__)
 CORS(app)
@@ -43,6 +46,10 @@ app.config['OUTPUT_FOLDER'] = 'output/web_output'
 # Ensure directories exist
 Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
 Path(app.config['OUTPUT_FOLDER']).mkdir(parents=True, exist_ok=True)
+
+# Task management for background discovery
+discovery_tasks = {}
+discovery_lock = threading.Lock()
 
 
 def load_config():
@@ -569,7 +576,7 @@ def generate():
 
 @app.route('/api/discover', methods=['POST'])
 def discover():
-    """Discover jobs based on resume keywords"""
+    """Start job discovery in the background"""
     try:
         # Support both JSON and multipart form (for file upload)
         if request.content_type and 'multipart/form-data' in request.content_type:
@@ -624,23 +631,74 @@ def discover():
                 'error': 'No resume provided or found. Please upload a resume or ensure input/resume.yml exists.'
             }), 400
             
-        # Run discovery
-        # use current directory for Path(".")
-        scored_all, top_n = run_discovery(resume_text, resume_structured, resolved_cfg, Path("."))
+        # Generate task ID
+        task_id = str(uuid.uuid4())
+        
+        # Initial status
+        with discovery_lock:
+            discovery_tasks[task_id] = {
+                'status': 'searching',
+                'start_time': time.time(),
+                'jobs': [],
+                'total_found': 0,
+                'error': None
+            }
+            
+        # Run discovery in background thread
+        def background_discovery(t_id, r_text, r_struct, r_cfg):
+            try:
+                scored_all, top_n = run_discovery(r_text, r_struct, r_cfg, Path("."))
+                with discovery_lock:
+                    discovery_tasks[t_id].update({
+                        'status': 'completed',
+                        'jobs': top_n,
+                        'total_found': len(scored_all)
+                    })
+            except Exception as e:
+                print(f"[api] Background discovery {t_id} failed: {e}")
+                traceback.print_exc()
+                with discovery_lock:
+                    discovery_tasks[t_id].update({
+                        'status': 'failed',
+                        'error': str(e)
+                    })
+                    
+        threading.Thread(
+            target=background_discovery, 
+            args=(task_id, resume_text, resume_structured, resolved_cfg),
+            daemon=True
+        ).start()
         
         return jsonify({
             'success': True,
-            'jobs': top_n,
-            'total_found': len(scored_all)
+            'task_id': task_id
         })
         
     except Exception as e:
-        print(f"[api] Discovery failed: {e}")
+        print(f"[api] Discovery initiation failed: {e}")
         traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/discovery_status/<task_id>', methods=['GET'])
+def discovery_status(task_id):
+    """Check status of a discovery task"""
+    with discovery_lock:
+        task = discovery_tasks.get(task_id)
+        
+    if not task:
+        return jsonify({'success': False, 'error': 'Task not found'}), 404
+        
+    return jsonify({
+        'success': True,
+        'status': task['status'],
+        'jobs': task['jobs'],
+        'total_found': task['total_found'],
+        'error': task['error']
+    })
 
 
 @app.route('/api/generate_with_resume', methods=['POST'])

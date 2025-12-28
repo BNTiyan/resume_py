@@ -55,7 +55,7 @@ skills:
 
 work:
   - company: "Rivian Automotive, LLC"
-    position: "Cybersecurity AI Analyst"
+    position: "Senior Cybersecurity AI Analyst"
     location: Remote, USA
     startDate: "May 2025"
     endDate: "Present"
@@ -75,7 +75,7 @@ work:
       - Integration slack bot to send notifications for new mrs created by fetching manager email from CODEOWNERS or Contributors.
 
   - company: "Robert Bosch, Michigan"
-    position: "Product Owner – Python Engineer | System Safety Engineer & Software Integrator (CSW)"
+    position: "Senior Software Engineer & Software Integrator"
     location: Michigan, USA
     startDate: "August 2023"
     endDate: "April 2025"
@@ -97,7 +97,7 @@ work:
       - Developed a robust framework for system safety compliance aligned with ISO standards across all phases.
 
   - company: "Continental Automotive India Private Limited"
-    position: "Scrum Master – ADAS Camera Object Detection, Tool Architect & Developer for AUTOSIM & TM_KPI_PORTAL"
+    position: "Senior Software Engineer & Tool Architect"
     location: Bangalore, India
     startDate: "May 2019"
     endDate: "July 2021"
@@ -121,7 +121,7 @@ work:
       - Developed visualization APIs and dashboards to accelerate debugging and decision-making.
 
   - company: "Teradata India Private Limited"
-    position: "Python Developer and Data Analyst"
+    position: "Senior Python Developer and Data Analyst"
     location: Hyderabad, India
     startDate: "August 2018"
     endDate: "May 2019"
