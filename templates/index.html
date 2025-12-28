@@ -4,8 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Quick Apply - Resume & Cover Letter Generator (v1.1)</title>
-    <!-- Version: 1.1 -->
+    <title>Quick Apply - Resume & Cover Letter Generator</title>
     <style>
         * {
             margin: 0;
@@ -354,173 +353,163 @@
                     <button class="tab" onclick="switchTab('description')">From Description</button>
                     <button class="tab" onclick="switchTab('discover')">Discover Jobs</button>
                 </div>
-
-                <!-- URL Tab -->
-                <div class="tab-content active" id="urlTab">
-                    <form onsubmit="generateFromUrl(event)">
-                        <div class="form-group">
-                            <label for="jobLink">Job Posting URL</label>
-                            <input type="url" id="jobLink" placeholder="https://boards.greenhouse.io/company/jobs/12345"
-                                required>
-                            <small style="color: #666; display: block; margin-top: 5px;">
-                                Supports Greenhouse, Lever, LinkedIn, Google Careers, and more
-                            </small>
-                        </div>
-
-                        <div class="row">
-                            <div class="form-group">
-                                <label for="companyUrl">Company Name (Optional)</label>
-                                <input type="text" id="companyUrl" placeholder="Auto-detected if empty">
-                            </div>
-                            <div class="form-group">
-                                <label for="titleUrl">Job Title (Optional)</label>
-                                <input type="text" id="titleUrl" placeholder="Auto-detected if empty">
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="resumeFileUrl">Upload Your Current Resume (optional)</label>
-                            <input type="file" id="resumeFileUrl" accept=".pdf,.docx">
-                            <small style="color: #666; display: block; margin-top: 5px;">
-                                If provided, we will use this resume as the base for scoring and tailoring.
-                            </small>
-                        </div>
-
-                        <button type="submit" class="btn" id="urlSubmitBtn">
-                            Generate Resume & Cover Letter
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Description Tab -->
-                <div class="tab-content" id="descriptionTab">
-                    <form onsubmit="generateFromDescription(event)">
-                        <div class="form-group">
-                            <label for="jobDescription">Job Description</label>
-                            <textarea id="jobDescription" placeholder="Paste the full job description here..."
-                                required></textarea>
-                        </div>
-
-                        <div class="row">
-                            <div class="form-group">
-                                <label for="companyDesc">Company Name</label>
-                                <input type="text" id="companyDesc" placeholder="e.g., Google" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="titleDesc">Job Title</label>
-                                <input type="text" id="titleDesc" placeholder="e.g., ML Engineer" required>
-                            </div>
-                        </div>
-
-                        <div class="form-group">
-                            <label for="resumeFileDesc">Upload Your Current Resume (optional)</label>
-                            <input type="file" id="resumeFileDesc" accept=".pdf,.docx">
-                            <small style="color: #666; display: block; margin-top: 5px;">
-                                If provided, we will use this resume as the base for scoring and tailoring.
-                            </small>
-                        </div>
-
-                        <button type="submit" class="btn" id="descSubmitBtn">
-                            Generate Resume & Cover Letter
-                        </button>
-                    </form>
-                </div>
-
-                <!-- Discover Tab -->
-                <div class="tab-content" id="discoverTab">
-                    <div style="text-align: center; padding: 20px;">
-                        <p style="margin-bottom: 20px; color: #667eea; font-weight: bold;">
-                            NEW: Upload your resume below to discover matching jobs!
-                        </p>
-
-                        <div class="form-group" style="max-width: 400px; margin: 0 auto 20px; text-align: left;">
-                            <label for="resumeFileDiscover">Upload Your Resume (optional)</label>
-                            <input type="file" id="resumeFileDiscover" accept=".pdf,.docx">
-                            <small style="color: #666; display: block; margin-top: 5px;">
-                                We'll use this to find matching jobs. If empty, we'll use your default profile.
-                            </small>
-                        </div>
-
-                        <button onclick="discoverJobs(event)" class="btn" id="discoverBtn" style="max-width: 400px;">
-                            Find Jobs for Me
-                        </button>
-                    </div>
-
-                    <div id="discoveredJobsList" style="margin-top: 30px; display: none;">
-                        <h3 style="margin-bottom: 15px;">🔍 Matching Jobs Found</h3>
-                        <div id="jobsTableContainer" style="overflow-x: auto;">
-                            <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-                                <thead>
-                                    <tr style="background: #f8f9fa; border-bottom: 2px solid #eee;">
-                                        <th style="padding: 12px; text-align: left;">Score</th>
-                                        <th style="padding: 12px; text-align: left;">Title</th>
-                                        <th style="padding: 12px; text-align: left;">Company</th>
-                                        <th style="padding: 12px; text-align: left; min-width: 100px;">Action</th>
-                                    </tr>
-                                </thead>
-                                <tbody id="jobsTableBody">
-                                    <!-- Jobs will be inserted here -->
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
             </div>
 
-            <!-- Loading State -->
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <h3>Generating Your Documents...</h3>
-                <p>This may take 30-60 seconds. Please wait.</p>
+            <!-- URL Tab -->
+            <div class="tab-content active" id="urlTab">
+                <form onsubmit="generateFromUrl(event)">
+                    <div class="form-group">
+                        <label for="jobLink">Job Posting URL</label>
+                        <input type="url" id="jobLink" placeholder="https://boards.greenhouse.io/company/jobs/12345"
+                            required>
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            Supports Greenhouse, Lever, LinkedIn, Google Careers, and more
+                        </small>
+                    </div>
+
+                    <div class="row">
+                        <div class="form-group">
+                            <label for="companyUrl">Company Name (Optional)</label>
+                            <input type="text" id="companyUrl" placeholder="Auto-detected if empty">
+                        </div>
+                        <div class="form-group">
+                            <label for="titleUrl">Job Title (Optional)</label>
+                            <input type="text" id="titleUrl" placeholder="Auto-detected if empty">
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="resumeFileUrl">Upload Your Current Resume (optional)</label>
+                        <input type="file" id="resumeFileUrl" accept=".pdf,.docx">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            If provided, we will use this resume as the base for scoring and tailoring.
+                        </small>
+                    </div>
+
+                    <button type="submit" class="btn" id="urlSubmitBtn">
+                        Generate Resume & Cover Letter
+                    </button>
+                </form>
             </div>
 
-            <!-- Results -->
-            <div class="results" id="results">
-                <div class="match-score">
-                    <div class="label">Match Score</div>
-                    <div class="score" id="matchScore">--</div>
-                    <div class="label" id="matchLabel">--</div>
-                </div>
-
-                <div class="job-info">
-                    <h3>📌 Job Details</h3>
-                    <p><strong>Company:</strong> <span id="resultCompany">--</span></p>
-                    <p><strong>Position:</strong> <span id="resultTitle">--</span></p>
-                </div>
-
-                <h3 style="margin-bottom: 20px;">📄 Download Your Documents</h3>
-
-                <div class="downloads">
-                    <div class="download-card">
-                        <h4>📄 Resume</h4>
-                        <a href="#" id="resumePdfLink" class="download-btn" target="_blank">Download PDF</a>
-                        <a href="#" id="resumeDocxLink" class="download-btn" target="_blank">Download DOCX</a>
-                        <br>
-                        <a href="#" id="resumePreviewLink" class="download-btn preview-btn" target="_blank">Preview
-                            PDF</a>
+            <!-- Description Tab -->
+            <div class="tab-content" id="descriptionTab">
+                <form onsubmit="generateFromDescription(event)">
+                    <div class="form-group">
+                        <label for="jobDescription">Job Description</label>
+                        <textarea id="jobDescription" placeholder="Paste the full job description here..."
+                            required></textarea>
                     </div>
 
-                    <div class="download-card">
-                        <h4>💌 Cover Letter</h4>
-                        <a href="#" id="coverPdfLink" class="download-btn" target="_blank">Download PDF</a>
-                        <a href="#" id="coverDocxLink" class="download-btn" target="_blank">Download DOCX</a>
-                        <br>
-                        <a href="#" id="coverPreviewLink" class="download-btn preview-btn" target="_blank">Preview
-                            PDF</a>
+                    <div class="row">
+                        <div class="form-group">
+                            <label for="companyDesc">Company Name</label>
+                            <input type="text" id="companyDesc" placeholder="e.g., Google" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="titleDesc">Job Title</label>
+                            <input type="text" id="titleDesc" placeholder="e.g., ML Engineer" required>
+                        </div>
                     </div>
-                </div>
 
-                <div class="new-application">
-                    <button class="btn" onclick="resetForm()">
-                        Create New Application
+                    <div class="form-group">
+                        <label for="resumeFileDesc">Upload Your Current Resume (optional)</label>
+                        <input type="file" id="resumeFileDesc" accept=".pdf,.docx">
+                        <small style="color: #666; display: block; margin-top: 5px;">
+                            If provided, we will use this resume as the base for scoring and tailoring.
+                        </small>
+                    </div>
+
+                    <button type="submit" class="btn" id="descSubmitBtn">
+                        Generate Resume & Cover Letter
+                    </button>
+                </form>
+            </div>
+
+            <!-- Discover Tab -->
+            <div class="tab-content" id="discoverTab">
+                <div style="text-align: center; padding: 20px;">
+                    <p style="margin-bottom: 20px; color: #666;">
+                        We'll analyze your resume keywords and search for the best matching jobs for you.
+                    </p>
+                    <button onclick="discoverJobs(event)" class="btn" id="discoverBtn">
+                        Find Jobs for Me
                     </button>
                 </div>
+
+                <div id="discoveredJobsList" style="margin-top: 30px; display: none;">
+                    <h3 style="margin-bottom: 15px;">🔍 Matching Jobs Found</h3>
+                    <div id="jobsTableContainer" style="overflow-x: auto;">
+                        <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+                            <thead>
+                                <tr style="background: #f8f9fa; border-bottom: 2px solid #eee;">
+                                    <th style="padding: 12px; text-align: left;">Score</th>
+                                    <th style="padding: 12px; text-align: left;">Title</th>
+                                    <th style="padding: 12px; text-align: left;">Company</th>
+                                    <th style="padding: 12px; text-align: left; min-width: 100px;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobsTableBody">
+                                <!-- Jobs will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
 
-        <div class="footer">
-            <p>Made with ❤️ for job seekers | Powered by AI</p>
+        <!-- Loading State -->
+        <div class="loading" id="loading">
+            <div class="spinner"></div>
+            <h3>Generating Your Documents...</h3>
+            <p>This may take 30-60 seconds. Please wait.</p>
         </div>
+
+        <!-- Results -->
+        <div class="results" id="results">
+            <div class="match-score">
+                <div class="label">Match Score</div>
+                <div class="score" id="matchScore">--</div>
+                <div class="label" id="matchLabel">--</div>
+            </div>
+
+            <div class="job-info">
+                <h3>📌 Job Details</h3>
+                <p><strong>Company:</strong> <span id="resultCompany">--</span></p>
+                <p><strong>Position:</strong> <span id="resultTitle">--</span></p>
+            </div>
+
+            <h3 style="margin-bottom: 20px;">📄 Download Your Documents</h3>
+
+            <div class="downloads">
+                <div class="download-card">
+                    <h4>📄 Resume</h4>
+                    <a href="#" id="resumePdfLink" class="download-btn" target="_blank">Download PDF</a>
+                    <a href="#" id="resumeDocxLink" class="download-btn" target="_blank">Download DOCX</a>
+                    <br>
+                    <a href="#" id="resumePreviewLink" class="download-btn preview-btn" target="_blank">Preview PDF</a>
+                </div>
+
+                <div class="download-card">
+                    <h4>💌 Cover Letter</h4>
+                    <a href="#" id="coverPdfLink" class="download-btn" target="_blank">Download PDF</a>
+                    <a href="#" id="coverDocxLink" class="download-btn" target="_blank">Download DOCX</a>
+                    <br>
+                    <a href="#" id="coverPreviewLink" class="download-btn preview-btn" target="_blank">Preview PDF</a>
+                </div>
+            </div>
+
+            <div class="new-application">
+                <button class="btn" onclick="resetForm()">
+                    Create New Application
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">
+        <p>Made with ❤️ for job seekers | Powered by AI</p>
+    </div>
     </div>
 
     <script>
@@ -720,101 +709,51 @@
             document.getElementById('errorAlert').classList.remove('active');
 
             try {
-                let response;
-                const fileInput = document.getElementById('resumeFileDiscover');
-                const resumeFile = fileInput && fileInput.files.length > 0 ? fileInput.files[0] : null;
-
-                if (resumeFile) {
-                    const formData = new FormData();
-                    formData.append('resume_file', resumeFile);
-                    response = await fetch('/api/discover', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } else {
-                    response = await fetch('/api/discover', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({})
-                    });
-                }
+                const response = await fetch('/api/discover', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({})
+                });
 
                 const data = await response.json();
 
-                if (data.success && data.task_id) {
-                    const taskId = data.task_id;
-                    let attempts = 0;
-                    const maxAttempts = 60; // 2 minutes with 2s interval
+                if (data.success) {
+                    const jobs = data.jobs;
+                    const tbody = document.getElementById('jobsTableBody');
+                    tbody.innerHTML = '';
 
-                    const pollStatus = async () => {
-                        try {
-                            const statusResponse = await fetch(`/api/discovery_status/${taskId}`);
-                            const statusData = await statusResponse.json();
+                    if (jobs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No jobs found. Try updating your resume keywords.</td></tr>';
+                    } else {
+                        jobs.forEach(job => {
+                            const tr = document.createElement('tr');
+                            tr.style.borderBottom = '1px solid #eee';
 
-                            if (statusData.status === 'completed') {
-                                displayJobs(statusData.jobs);
-                                btn.disabled = false;
-                                btn.textContent = originalText;
-                            } else if (statusData.status === 'failed') {
-                                showError(statusData.error || 'Discovery failed');
-                                btn.disabled = false;
-                                btn.textContent = originalText;
-                            } else if (attempts >= maxAttempts) {
-                                showError('Discovery timed out. Please try again or check the server logs.');
-                                btn.disabled = false;
-                                btn.textContent = originalText;
-                            } else {
-                                attempts++;
-                                btn.textContent = `Searching... (${attempts * 2}s)`;
-                                setTimeout(pollStatus, 2000);
-                            }
-                        } catch (err) {
-                            showError('Error checking status: ' + err.message);
-                            btn.disabled = false;
-                            btn.textContent = originalText;
-                        }
-                    };
+                            const scoreColor = job.score >= 70 ? '#28a745' : (job.score >= 50 ? '#ffc107' : '#dc3545');
 
-                    setTimeout(pollStatus, 2000);
+                            tr.innerHTML = `
+                                <td style="padding: 12px; font-weight: bold; color: ${scoreColor}">${job.score}%</td>
+                                <td style="padding: 12px;">${job.title}</td>
+                                <td style="padding: 12px;">${job.company}</td>
+                                <td style="padding: 12px;">
+                                    <button onclick="applyToDiscoveredJob('${btoa(JSON.stringify(job))}')" class="btn" style="padding: 5px 10px; font-size: 12px; width: auto; background: #28a745;">Apply</button>
+                                </td>
+                            `;
+                            tbody.appendChild(tr);
+                        });
+                    }
+                    document.getElementById('discoveredJobsList').style.display = 'block';
                 } else {
-                    showError(data.error || 'Failed to initiate discovery');
-                    btn.disabled = false;
-                    btn.textContent = originalText;
+                    showError(data.error || 'Failed to discover jobs');
                 }
             } catch (error) {
                 showError('Network error: ' + error.message);
+            } finally {
                 btn.disabled = false;
                 btn.textContent = originalText;
             }
-        }
-
-        function displayJobs(jobs) {
-            const tbody = document.getElementById('jobsTableBody');
-            tbody.innerHTML = '';
-
-            if (jobs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; padding: 20px;">No jobs found. Try updating your resume keywords.</td></tr>';
-            } else {
-                jobs.forEach(job => {
-                    const tr = document.createElement('tr');
-                    tr.style.borderBottom = '1px solid #eee';
-
-                    const scoreColor = job.score >= 70 ? '#28a745' : (job.score >= 50 ? '#ffc107' : '#dc3545');
-
-                    tr.innerHTML = `
-                        <td style="padding: 12px; font-weight: bold; color: ${scoreColor}">${job.score}%</td>
-                        <td style="padding: 12px;">${job.title}</td>
-                        <td style="padding: 12px;">${job.company}</td>
-                        <td style="padding: 12px;">
-                            <button onclick="applyToDiscoveredJob('${btoa(JSON.stringify(job))}')" class="btn" style="padding: 5px 10px; font-size: 12px; width: auto; background: #28a745;">Apply</button>
-                        </td>
-                    `;
-                    tbody.appendChild(tr);
-                });
-            }
-            document.getElementById('discoveredJobsList').style.display = 'block';
         }
 
         function applyToDiscoveredJob(jobBase64) {

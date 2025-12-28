@@ -31,9 +31,6 @@ from resume_parser import parse_resume_file
 import re
 from docx import Document as DocxDocument
 from PyPDF2 import PdfReader
-import threading
-import uuid
-import time
 
 app = Flask(__name__)
 CORS(app)
@@ -46,10 +43,6 @@ app.config['OUTPUT_FOLDER'] = 'output/web_output'
 # Ensure directories exist
 Path(app.config['UPLOAD_FOLDER']).mkdir(parents=True, exist_ok=True)
 Path(app.config['OUTPUT_FOLDER']).mkdir(parents=True, exist_ok=True)
-
-# Task management for background discovery
-discovery_tasks = {}
-discovery_lock = threading.Lock()
 
 
 def load_config():
@@ -611,16 +604,9 @@ def generate():
 
 @app.route('/api/discover', methods=['POST'])
 def discover():
-    """Start job discovery in the background"""
+    """Discover jobs based on resume keywords"""
     try:
-        # Support both JSON and multipart form (for file upload)
-        if request.content_type and 'multipart/form-data' in request.content_type:
-            data = request.form
-            resume_file = request.files.get('resume_file')
-        else:
-            data = request.json or {}
-            resume_file = None
-            
+        data = request.json or {}
         resume_id = data.get('resume_id')
         
         # Load configuration
@@ -715,30 +701,12 @@ def discover():
         })
         
     except Exception as e:
-        print(f"[api] Discovery initiation failed: {e}")
+        print(f"[api] Discovery failed: {e}")
         traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
-
-
-@app.route('/api/discovery_status/<task_id>', methods=['GET'])
-def discovery_status(task_id):
-    """Check status of a discovery task"""
-    with discovery_lock:
-        task = discovery_tasks.get(task_id)
-        
-    if not task:
-        return jsonify({'success': False, 'error': 'Task not found'}), 404
-        
-    return jsonify({
-        'success': True,
-        'status': task['status'],
-        'jobs': task['jobs'],
-        'total_found': task['total_found'],
-        'error': task['error']
-    })
 
 
 @app.route('/api/generate_with_resume', methods=['POST'])
