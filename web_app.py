@@ -571,33 +571,59 @@ def generate():
 def discover():
     """Discover jobs based on resume keywords"""
     try:
-        data = request.json or {}
+        # Support both JSON and multipart form (for file upload)
+        if request.content_type and 'multipart/form-data' in request.content_type:
+            data = request.form
+            resume_file = request.files.get('resume_file')
+        else:
+            data = request.json or {}
+            resume_file = None
+            
         resume_id = data.get('resume_id')
         
         # Load configuration
         config = load_config() or {}
         resolved_cfg = resolve_from_config(config)
         
-        # Determine resume path
-        resume_path = None
-        if resume_id:
-            resume_path = Path(app.config['UPLOAD_FOLDER']) / resume_id
-        else:
-            # Fallback to default YAML
-            resume_path = Path("input/resume.yml")
-            if not resume_path.exists():
-                # Try common text location
-                resume_path = Path("input/resume.txt")
+        resume_text = None
+        resume_structured = None
         
-        if not resume_path.exists():
+        if resume_file and resume_file.filename != '':
+            # Handle uploaded resume file
+            upload_dir = Path(app.config['UPLOAD_FOLDER'])
+            upload_dir.mkdir(parents=True, exist_ok=True)
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            safe_name = re.sub(r'[^a-zA-Z0-9_.-]', '_', resume_file.filename)
+            saved_path = upload_dir / f"{timestamp}_{safe_name}"
+            resume_file.save(str(saved_path))
+            
+            # Extract text + basics
+            resume_structured = parse_resume_file(saved_path)
+            resume_text = extract_text_from_resume_file(saved_path)
+            print(f"[api] Used uploaded resume for discovery: {resume_file.filename}")
+        else:
+            # Determine resume path from ID or fallback
+            resume_path = None
+            if resume_id:
+                resume_path = Path(app.config['UPLOAD_FOLDER']) / resume_id
+            else:
+                # Fallback to default YAML
+                resume_path = Path("input/resume.yml")
+                if not resume_path.exists():
+                    # Try common text location
+                    resume_path = Path("input/resume.txt")
+            
+            if resume_path and resume_path.exists():
+                # Load resume data
+                resume_text, resume_structured = load_resume_data(resume_path)
+                print(f"[api] Used existing resume for discovery: {resume_path}")
+        
+        if not resume_text:
             return jsonify({
                 'success': False,
-                'error': f'Resume file not found ({resume_path})'
-            }), 404
+                'error': 'No resume provided or found. Please upload a resume or ensure input/resume.yml exists.'
+            }), 400
             
-        # Load resume data
-        resume_text, resume_structured = load_resume_data(resume_path)
-        
         # Run discovery
         # use current directory for Path(".")
         scored_all, top_n = run_discovery(resume_text, resume_structured, resolved_cfg, Path("."))
