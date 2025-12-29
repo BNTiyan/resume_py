@@ -131,6 +131,8 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
         "a[href*='/details/']",
         "a[href*='/en-us/details/']",
         "a[href*='/open-positions/']",
+        "a[href*='job-detail']",
+        "a[href*='/job-detail/']",
         "a[href*='requisition']",
         "a[href*='requisition-item']",
         "a[href*='jobPosting']",
@@ -143,6 +145,8 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
         # Common containers across career sites
         "tr[id^='job-']",
         "div.job-title.job-list-item",
+        "div.job-search-results-listing__item",
+        "div.job-search-tile",
         "li[data-automation-id='jobPosting']",
         "tr[data-ui='requisition-item']",
         "li[data-ui='requisition-item']",
@@ -165,6 +169,17 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
 
     if not site.get("wait_selector"):
         site["wait_selector"] = site["list_selector"]
+
+    # Add generic "open roles / search" click patterns if missing.
+    # This helps on sites that initially show a search landing page (e.g., "What do you want to do?")
+    site.setdefault(
+        "open_roles_text",
+        ["open roles", "view all jobs", "see all openings", "current openings", "job openings", "find open roles"],
+    )
+    site.setdefault(
+        "search_patterns",
+        ["search for open roles", "search roles", "search jobs", "find jobs", "job search", "search openings", "start job search"],
+    )
 
     # Generic guardrail: if link_selector suggests a specific path fragment,
     # enforce it at URL level to reduce nav/PDF links being treated as jobs.

@@ -315,16 +315,17 @@
       {
         "company": "bofa",
         "url": "https://careers.bankofamerica.com/en-us/job-search/united-states",
-        "list_selector": "article[class*='job'], li[class*='job'], div[class*='job-card'], div[class*='job-listing'], a[href*='/job/'], a[href*='/jobs/']",
-        "title_selector": "a[class*='job-title'], h2, h3",
-        "location_selector": "span[class*='job-location'], span[class*='location'], div[class*='location']",
-        "link_selector": "a[href*='/job/'], a[href*='/jobs/'], a[href*='careers']",
+        "list_selector": "div.job-search-results-listing__item, div.job-search-tile",
+        "title_selector": "h3.job-search-tile__title a.job-search-tile__url, a[href*='/job-detail/']",
+        "location_selector": ".job-search-tile__detail, i.icon--location, span[class*='location'], div[class*='location']",
+        "link_selector": "a[href*='/job-detail/'], a[href*='job-detail']",
         "source": "selenium:bofa",
         "careers_url": "https://careers.bankofamerica.com/",
-        "domain_filter": "bankofamerica.com",
+        "domain_filter": "careers.bankofamerica.com",
+        "require_path_contains": "/job-detail/",
         "absolute_base": "https://careers.bankofamerica.com",
         "sleep_seconds": 3,
-        "wait_selector": "article[class*='job'], li[class*='job'], div[class*='job-card']"
+        "wait_selector": "div.job-search-results-listing__item, div.job-search-tile"
       },
       {
         "company": "gm",

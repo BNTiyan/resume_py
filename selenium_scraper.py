@@ -4,6 +4,7 @@ from typing import Any
 from urllib.parse import urljoin, urlparse
 
 import os
+import re
 
 try:
     from selenium import webdriver
@@ -30,6 +31,89 @@ try:
 except Exception:
     LLM_JOB_LIST_EXTRACTOR_AVAILABLE = False
     LLMJobListExtractor = None
+
+
+_JOB_URL_HINTS = [
+    "/job-detail/",
+    "/job_detail/",
+    "/details/",
+    "/open-positions/",
+    "/jobs/search/open-positions/",
+    "/requisition",
+    "requisition-item",
+]
+_NON_JOB_URL_HINTS = [
+    ".pdf",
+    ".jpg",
+    ".png",
+    ".svg",
+    "javascript:",
+    "mailto:",
+]
+_NON_JOB_TITLE_HINTS = [
+    "what do you want to do",
+    "learn more",
+    "view all",
+    "explore",
+    "careers",
+    "open positions",
+    "working here",
+    "key hiring areas",
+]
+
+
+def _heuristic_extract_job_links(page_source: str, base_url: str) -> list[dict[str, str]]:
+    """
+    Heuristic fallback extraction when CSS selectors fail.
+    Extract anchors and keep only likely job-detail links.
+    """
+    if not page_source:
+        return []
+    results: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    # Very lightweight anchor extraction; avoids bringing in bs4.
+    # We don't need perfect HTML parsing—just href + some nearby text.
+    for m in re.finditer(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', page_source, re.IGNORECASE | re.DOTALL):
+        href = (m.group(1) or "").strip()
+        text = (m.group(2) or "")
+        # Strip tags from anchor text
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        if not href:
+            continue
+        href_l = href.lower()
+        if any(bad in href_l for bad in _NON_JOB_URL_HINTS):
+            continue
+        if href_l.startswith("#"):
+            continue
+
+        # Make absolute
+        if href.startswith("/"):
+            url = urljoin(base_url, href)
+        elif href.startswith("http://") or href.startswith("https://"):
+            url = href
+        else:
+            url = urljoin(base_url, "/" + href.lstrip("/"))
+
+        url_l = url.lower()
+        if not any(h in url_l for h in _JOB_URL_HINTS) and ("/job/" not in url_l and "/jobs/" not in url_l):
+            continue
+
+        title = text[:200]
+        if not title:
+            # last resort: use URL fragment
+            title = "Job"
+        if any(h in title.lower() for h in _NON_JOB_TITLE_HINTS):
+            continue
+
+        if url in seen:
+            continue
+        seen.add(url)
+        results.append({"url": url, "title": title})
+
+    return results
 
 
 def create_chrome_driver(headless: bool = True, window_size: str = "1920,1080") -> Any:
@@ -525,6 +609,43 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
             jobs_with_titles = sum(1 for r in results if r.get("title") and r.get("title").strip() and not r.get("title", "").startswith("Job at"))
             print(f"[selenium-debug] Processed {processed_count} items from {len(items)} containers, extracted {len(results)} jobs ({valid_url_count} with valid URLs, {jobs_with_titles} with real titles)")
             
+            # Heuristic extraction fallback (NO LLM). This helps when:
+            # - list_selector matched nothing and we fell back to scanning the whole page
+            # - job links exist but are not covered by current selectors
+            if valid_url_count < 3 or jobs_with_titles < 3:
+                try:
+                    page_source = driver.page_source or ""
+                    base_url = site.get("absolute_base") or url
+                    heuristic = _heuristic_extract_job_links(page_source, base_url)
+                    if heuristic:
+                        existing_urls = {r.get("url") for r in results if r.get("url")}
+                        added = 0
+                        for h in heuristic:
+                            hurl = h.get("url") or ""
+                            if not hurl or hurl in existing_urls:
+                                continue
+                            results.append(
+                                {
+                                    "title": h.get("title") or "",
+                                    "company": site.get("company") or "",
+                                    "location": "",
+                                    "description": "",
+                                    "url": hurl,
+                                    "careers_url": careers_url,
+                                    "source": f"heuristic_extractor:{site.get('company') or 'unknown'}",
+                                }
+                            )
+                            existing_urls.add(hurl)
+                            added += 1
+                            if len(results) >= fetch_limit:
+                                break
+                        if added:
+                            valid_url_count = sum(1 for r in results if r.get("url") and r.get("url").startswith("http"))
+                            jobs_with_titles = sum(1 for r in results if r.get("title") and r.get("title").strip() and not r.get("title", "").startswith("Job at"))
+                            print(f"[selenium-debug] Heuristic extraction added {added} jobs (total now {len(results)}; {valid_url_count} valid URLs)")
+                except Exception as e:
+                    print(f"[selenium-debug] Heuristic extraction failed: {type(e).__name__}: {e}")
+
             # If we didn't get enough jobs with VALID URLs AND real titles, try LLM extraction as fallback
             if (valid_url_count < 3 or jobs_with_titles < 3) and LLM_JOB_LIST_EXTRACTOR_AVAILABLE:
                 try:

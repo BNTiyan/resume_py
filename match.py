@@ -2212,8 +2212,9 @@ def main() -> None:
             resume_results = []
             job_assets = {} # Initialize as empty dict, will be populated per job
             
-            # FAST MODE: If we just want discovery results, we can skip heavy LLM/Selenium parsing
-            fast_mode = resolved_cfg.get("fast_discovery", True)
+            # FAST MODE: If we just want discovery results, we can skip expensive parsing/enrichment,
+            # but we should NOT skip resume/cover-letter generation when auto_tailor_resume is enabled.
+            fast_mode = bool(resolved_cfg.get("fast_discovery", False))
             
             print_lock = Lock()
             stats_lock = Lock()
@@ -2249,12 +2250,11 @@ def main() -> None:
                     builder_tailored = builder
                     should_force_llm_resume = False
                     
-                    # SPEED OPTIMIZATION: Skip deep parsing if we already have a description and are in fast mode
+                    # SPEED OPTIMIZATION: Skip deep parsing if we already have a description and are in fast mode.
+                    # IMPORTANT: Do not return early; we still want to generate resumes/cover letters from jd_text.
                     if fast_mode and jd_text and len(jd_text) > 200:
-                        with print_lock: print(f"  [speed] Skipping deep parsing for {company_label} (already have {len(jd_text)} chars)")
-                        assets["company"] = company
-                        assets["role"] = role
-                        return # In discovery mode, we just want the list. Skip the rest of the loop for this job.
+                        with print_lock:
+                            print(f"  [speed] Fast mode: skipping deep parsing for {company_label} (already have {len(jd_text)} chars)")
     
                     html_parsed_info = {}
                     if (
@@ -2856,7 +2856,7 @@ def main() -> None:
                             print(f'[parallel] Job failed: {e}')
             print(f"[cover] generated cover letters in {letters_dir}")
             if auto_tailor:
-                print(f"[resume] generated tailored resumes in {tailored_resumes_dir}")
+                print(f"[resume] generated tailored resumes in {tailored_resumes_dir} (count={filter_stats.get('created', 0)})")
         except Exception as e:
             print("[cover] skipped:", e)
     autofill_cfg = resolved_cfg.get("autofill") or {}
