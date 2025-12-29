@@ -1375,6 +1375,13 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
         "warehouse", "delivery driver", "driver", "janitor", "custodian",
         "store manager", "shift supervisor", "shift lead"
     ]
+    # Add user-defined exclusions from config
+    user_exclusions = resolved_cfg.get("exclude_titles") or []
+    if user_exclusions and isinstance(user_exclusions, list):
+         print(f"[filter] Adding {len(user_exclusions)} user-defined exclusion patterns")
+         for pat in user_exclusions:
+             if pat and isinstance(pat, str):
+                 non_technical_patterns.append(pat.lower())
     pre_non_tech = len(fetched)
     fetched = [
         j for j in fetched

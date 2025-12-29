@@ -1,0 +1,174 @@
+name: Job Fetcher (No Documents)
+
+on:
+  workflow_dispatch:
+  workflow_call:
+    inputs:
+      config_path:
+        description: Path to config JSON (defaults to config.fetch.json)
+        required: false
+        type: string
+        default: config.fetch.json
+
+permissions:
+  contents: read
+
+concurrency:
+  group: job-fetcher
+  cancel-in-progress: true
+
+jobs:
+  fetch-jobs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: 'requirements.txt'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chrome (for Selenium)
+        uses: browser-actions/setup-chrome@v1
+        with:
+          chrome-version: stable
+
+      - name: Run fetcher with config
+        timeout-minutes: 40
+        env:
+          SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GEMINI_RESUME_MODEL: "gemini-2.5-flash"
+          PYTHONUNBUFFERED: "1"
+        run: |
+          echo "🚀 Starting job fetcher..."
+          CONFIG_PATH="${{ inputs.config_path || 'config.fetch.json' }}"
+          echo "Config: $CONFIG_PATH"
+          echo "⏰ Timeout: 40 minutes"
+          echo ""
+          
+          # Run with verbose output
+          python match.py --config "$CONFIG_PATH" 2>&1 | tee fetch.log
+          
+          echo ""
+          echo "✅ Fetcher completed"
+
+      - name: List outputs
+        if: always()
+        run: |
+          echo "📁 Output directory structure:"
+          ls -lR output/ 2>/dev/null || echo "No output directory found"
+          
+          echo ""
+          echo "📊 Generated Files Summary:"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          # Count parsed jobs
+          PARSED_COUNT=$(find output/parsed_jobs -type f 2>/dev/null | wc -l | tr -d ' ')
+          echo "🔍 Parsed Jobs (Descriptions): $PARSED_COUNT files"
+          
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          echo ""
+          echo "📊 Job description statistics:"
+          if [ -d "output" ]; then
+            find output -name "*.json" -type f | while read f; do
+              echo "File: $f"
+              python3 -c "import json; d=json.load(open('$f')); print(f\"Jobs: {len(d.get('jobs', []))}\"); [print(f\"  {j.get('company','')} - JD length: {len(j.get('description',''))} chars\") for j in d.get('jobs', [])[:5]]" 2>/dev/null || echo "  Could not parse"
+            done
+          fi
+
+      - name: Upload results artifact (JSON)
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetched-jobs-json-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/*.json
+          if-no-files-found: warn
+          retention-days: 7
+      
+      - name: Upload fetch log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fetch-log-${{ github.run_id }}-${{ github.run_attempt }}
+          path: fetch.log
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload parsed jobs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: parsed-jobs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/parsed_jobs/
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Append results to job summary
+        if: always()
+        run: |
+          echo "# 📊 Job Fetcher Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          LATEST=$(ls -1t output/*.json 2>/dev/null | head -n1 || true)
+          
+          if [ -n "$LATEST" ]; then
+            echo "## Latest Output: \`$(basename $LATEST)\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            
+            # Extract statistics using Python
+            python3 << EOF >> $GITHUB_STEP_SUMMARY
+            import json
+            import sys
+  
+            try:
+                with open("$LATEST") as f:
+                    data = json.load(f)
+              
+                jobs = data.get("jobs", [])
+                print(f"### Statistics")
+                print(f"- **Total Jobs Fetched**: {len(jobs)}")
+              
+                if jobs:
+                    with_desc = sum(1 for j in jobs if len(j.get('description', '')) > 100)
+                    print(f"- **Jobs with Descriptions**: {with_desc} / {len(jobs)}")
+                    
+                    scores = [j.get('score', 0) for j in jobs if 'score' in j]
+                    if scores:
+                        avg = sum(scores) / len(scores)
+                        print(f"- **Average Match Score**: {avg:.1f}")
+                    
+                    print(f"")
+                    print(f"### Top 10 Jobs")
+                    print(f"")
+                    print("| Company | Title | Score | JD Length |")
+                    print("|---------|-------|-------|-----------|")
+                    
+                    for idx, job in enumerate(jobs[:10]):
+                        company = job.get('company', 'Unknown')[:20]
+                        title = job.get('title', 'Unknown')[:40]
+                        score = job.get('score', 0)
+                        desc_len = len(job.get('description', ''))
+                        print(f"| {company} | {title} | {score:.1f} | {desc_len} chars |")
+                else:
+                    print("")
+                    print("⚠️ No jobs found in output")
+                  
+            except Exception as e:
+                print(f"")
+                print(f"⚠️ Error parsing output: {e}")
+            EOF
+          else
+            echo "⚠️ No output files found" >> $GITHUB_STEP_SUMMARY
+          fi

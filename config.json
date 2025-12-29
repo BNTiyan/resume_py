@@ -73,6 +73,20 @@
     "cybersecurity engineer"
   ],
   "target_locations": [],
+  "exclude_titles": [
+    "program manager",
+    "executive assistant",
+    "staff accountant",
+    "intern",
+    "security coordinator",
+    "id admin",
+    "finance product cost",
+    "finance business partner",
+    "technician",
+    "field service",
+    "Part-time",
+    "contractor"
+  ],
   "serpapi_key": "",
   "selenium_options": {
     "enabled": true,
