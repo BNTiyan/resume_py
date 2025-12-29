@@ -175,4 +175,84 @@ jobs:
           if-no-files-found: warn
           retention-days: 7
 
+  aggregate-results:
+    name: Aggregate outputs (one folder + one CSV)
+    needs: match-jobs
+    runs-on: ubuntu-latest
+    if: always()
+    timeout-minutes: 15
+    steps:
+      - name: Download all output artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: output-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: combined/raw
+
+      - name: Combine into single folder + CSV
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p combined/final
+          mkdir -p combined/final/output
+          
+          # Copy all outputs into one folder tree (namespaced by artifact folder to avoid collisions)
+          for d in combined/raw/output-*; do
+            [ -d "$d" ] || continue
+            name="$(basename "$d")"
+            if [ -d "$d/output" ]; then
+              mkdir -p "combined/final/output/${name}"
+              cp -R "$d/output/." "combined/final/output/${name}/" || true
+            fi
+            if [ -d "$d/resume_py/output" ]; then
+              mkdir -p "combined/final/output/${name}"
+              cp -R "$d/resume_py/output/." "combined/final/output/${name}/" || true
+            fi
+          done
+          
+          # Merge scored_jobs.csv into one CSV with an extra "pipeline" column.
+          python3 - << 'PY'
+          import csv
+          from pathlib import Path
+          
+          base = Path("combined/final/output")
+          out_csv = Path("combined/final/combined_scored_jobs.csv")
+          
+          rows = []
+          header = None
+          
+          for pipeline_dir in sorted(base.glob("output-*/")):
+              scored = pipeline_dir / "scored_jobs.csv"
+              if not scored.exists():
+                  # Some runs may only write timestamped CSVs; skip if not present.
+                  continue
+              with scored.open("r", encoding="utf-8", newline="") as f:
+                  r = csv.reader(f)
+                  h = next(r, None)
+                  if not h:
+                      continue
+                  if header is None:
+                      header = ["pipeline"] + h
+                  for row in r:
+                      rows.append([pipeline_dir.name.replace("output-", "")] + row)
+          
+          if header is None:
+              # Still write an empty file so the artifact is predictable
+              out_csv.write_text("pipeline\n", encoding="utf-8")
+          else:
+              out_csv.parent.mkdir(parents=True, exist_ok=True)
+              with out_csv.open("w", encoding="utf-8", newline="") as f:
+                  w = csv.writer(f)
+                  w.writerow(header)
+                  w.writerows(rows)
+          print(f"Wrote {out_csv} with {len(rows)} rows")
+          PY
+
+      - name: Upload aggregated artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: aggregated-output-${{ github.run_id }}-${{ github.run_attempt }}
+          path: combined/final/
+          if-no-files-found: warn
+          retention-days: 14
+
 
