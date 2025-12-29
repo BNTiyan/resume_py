@@ -51,13 +51,22 @@ if [ ! -z "$WORKDAY_PASSWORD_SECONDARY" ]; then
     echo "ℹ️  Secondary password configured."
 fi
 
+# Optional: pass a config path as the first argument
+#   ./run_pipeline.sh configs/pipelines/meta.json
+CONFIG_PATH="${1:-config.json}"
+if [ ! -f "$CONFIG_PATH" ]; then
+    echo "❌ Error: Config file not found: $CONFIG_PATH"
+    echo "Usage: ./run_pipeline.sh [path/to/config.json]"
+    exit 1
+fi
+
 # Install requirements if needed (uncomment if running in fresh env)
 # pip install -r requirements.txt
 
 # Run the agent
 # --auto-submit: Enables actual submission (remove for dry-run)
-# --config config.json: Uses your main configuration with all companies
-python3 agent_cli.py --config config.json --auto-submit
+# --config <file>: Uses the specified configuration
+python3 agent_cli.py --config "$CONFIG_PATH" --auto-submit
 
 EXIT_CODE=$?
 
