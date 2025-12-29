@@ -23,6 +23,49 @@ def load_config(path: Path) -> Dict[str, Any]:
 def save_config(path: Path, data: Dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
+def _split_css_list(s: str) -> List[str]:
+    return [p.strip() for p in (s or "").split(",") if p.strip()]
+
+
+def _join_css_list(parts: List[str]) -> str:
+    # Keep stable order while de-duping
+    seen = set()
+    out: List[str] = []
+    for p in parts:
+        if p not in seen:
+            out.append(p)
+            seen.add(p)
+    return ", ".join(out)
+
+
+def _infer_require_path_contains(link_selector: str) -> str:
+    """
+    Generic heuristic: if link_selector contains a specific href*='/.../' fragment,
+    infer require_path_contains so Selenium drops nav/PDF links.
+    """
+    candidates: List[str] = []
+    for part in _split_css_list(link_selector):
+        if "href*=" not in part:
+            continue
+        for quote in ("'", '"'):
+            if quote not in part:
+                continue
+            try:
+                frag = part.split("href*=")[1]
+                frag = frag.split(quote)[1]
+                if frag.startswith("/"):
+                    candidates.append(frag)
+            except Exception:
+                pass
+            break
+    if not candidates:
+        return ""
+    best = max(candidates, key=len)
+    # Normalize common variants
+    if "/details/" in best:
+        return "/details/"
+    return best
+
 
 def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
     """Return a normalized copy of a single selenium site entry."""
@@ -35,23 +78,23 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
     def ensure_link_patterns(default_patterns: List[str]) -> str:
         existing = (site.get("link_selector") or "").strip()
         if not existing:
-            return ", ".join(default_patterns)
+            return _join_css_list(default_patterns)
         # Keep existing but ensure at least one generic job URL pattern is present
-        parts = [p.strip() for p in existing.split(",") if p.strip()]
+        parts = _split_css_list(existing)
         for pat in default_patterns:
             if pat not in parts:
                 parts.append(pat)
-        return ", ".join(parts)
+        return _join_css_list(parts)
 
     def ensure_list_patterns(default_patterns: List[str]) -> str:
         existing = (site.get("list_selector") or "").strip()
         if not existing:
-            return ", ".join(default_patterns)
-        parts = [p.strip() for p in existing.split(",") if p.strip()]
+            return _join_css_list(default_patterns)
+        parts = _split_css_list(existing)
         for pat in default_patterns:
             if pat not in parts:
                 parts.append(pat)
-        return ", ".join(parts)
+        return _join_css_list(parts)
 
     # Special cases with well-known stable patterns
     if "metacareers.com" in host:
@@ -84,11 +127,25 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
 
     # Generic fallback for "jobs" or "careers" domains
     generic_link_patterns = [
+        # Common job-detail URL patterns
+        "a[href*='/details/']",
+        "a[href*='/en-us/details/']",
+        "a[href*='/open-positions/']",
+        "a[href*='requisition']",
+        "a[href*='requisition-item']",
+        "a[href*='jobPosting']",
+        # Generic /job/ patterns
         "a[href*='/job/']",
         "a[href*='/jobs/']",
         "a[href*='careers']",
     ]
     generic_list_patterns = [
+        # Common containers across career sites
+        "tr[id^='job-']",
+        "div.job-title.job-list-item",
+        "li[data-automation-id='jobPosting']",
+        "tr[data-ui='requisition-item']",
+        "li[data-ui='requisition-item']",
         "div[class*='job-card']",
         "div[class*='job-listing']",
         "li[class*='job']",
@@ -108,6 +165,20 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
 
     if not site.get("wait_selector"):
         site["wait_selector"] = site["list_selector"]
+
+    # Generic guardrail: if link_selector suggests a specific path fragment,
+    # enforce it at URL level to reduce nav/PDF links being treated as jobs.
+    if not site.get("require_path_contains"):
+        inferred = _infer_require_path_contains(site.get("link_selector") or "")
+        if inferred:
+            site["require_path_contains"] = inferred
+
+    # Fill missing domain/base values (don't overwrite user-provided values)
+    if not site.get("domain_filter") and host:
+        site["domain_filter"] = host
+    if not site.get("absolute_base") and host:
+        scheme = parsed.scheme or "https"
+        site["absolute_base"] = f"{scheme}://{host}"
 
     return site
 

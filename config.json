@@ -202,16 +202,17 @@
       {
         "company": "apple",
         "url": "https://jobs.apple.com/en-us/search?location=united-states-USA&team=software-and-services-SFTWR+machine-learning-and-ai-MLAI",
-        "list_selector": "tr[id*='job-'], li[class*='job'], div[class*='job-card'], div[class*='job-listing'], article[class*='job'], a[href*='/job/'], a[href*='/jobs/']",
-        "title_selector": "a[id*='job-title'], h3, h4",
+        "list_selector": "div.job-title.job-list-item",
+        "title_selector": "h3 a[href*='/en-us/details/'], a[id*='job-title']",
         "location_selector": ".table--advanced-search__location, span[class*='location'], div[class*='location']",
-        "link_selector": "a[href*='/details/'], a[href*='/job/'], a[href*='/jobs/'], a[href*='careers']",
+        "link_selector": "a[href*='/en-us/details/'], a[href*='/details/']",
         "source": "selenium:apple",
         "careers_url": "https://jobs.apple.com/",
-        "domain_filter": "apple.com",
+        "domain_filter": "jobs.apple.com",
+        "require_path_contains": "/details/",
         "absolute_base": "https://jobs.apple.com",
         "sleep_seconds": 3,
-        "wait_selector": "tr[id*='job-'], li[class*='job']"
+        "wait_selector": "div.job-title.job-list-item, a[href*='/details/']"
       },
       {
         "company": "amazon",
