@@ -29,11 +29,11 @@ jobs:
           set -euo pipefail
           # Supports both layouts:
           #  - repo root IS the project (config.json present)
-          #  - repo root contains a subdir () with the project
+          #  - repo root contains a subdir (resume_py/) with the project
           if [ -f "config.json" ] && [ -f "requirements.txt" ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          elif [ -f "config.json" ] && [ -f "requirements.txt" ]; then
-            echo "PROJECT_DIR=resume_py" >> "$GITHUB_ENV"
+            PROJECT_DIR="."
+          elif [ -f "resume_py/config.json" ] && [ -f "resume_py/requirements.txt" ]; then
+            PROJECT_DIR="resume_py"
           else
             echo "❌ Could not detect project directory."
             echo "Repo root:"
@@ -43,6 +43,7 @@ jobs:
             ls -la resume_py 2>/dev/null || true
             exit 1
           fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "✅ PROJECT_DIR=$PROJECT_DIR"
 
       - name: Build pipeline matrix from config.json (group by company)
@@ -68,14 +69,15 @@ jobs:
         run: |
           set -euo pipefail
           if [ -f "config.json" ] && [ -f "requirements.txt" ]; then
-            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
-          elif [ -f "config.json" ] && [ -f "requirements.txt" ]; then
-            echo "PROJECT_DIR=resume_py" >> "$GITHUB_ENV"
+            PROJECT_DIR="."
+          elif [ -f "resume_py/config.json" ] && [ -f "resume_py/requirements.txt" ]; then
+            PROJECT_DIR="resume_py"
           else
             echo "❌ Could not detect project directory."
             ls -la
             exit 1
           fi
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "✅ PROJECT_DIR=$PROJECT_DIR"
 
       - name: Set up Python
@@ -85,7 +87,7 @@ jobs:
           cache: 'pip'
           cache-dependency-path: |
             requirements.txt
-            requirements.txt
+            resume_py/requirements.txt
 
       - name: Install dependencies
         run: |
@@ -152,7 +154,7 @@ jobs:
           name: match-log-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             match_${{ matrix.safe_name }}.log
-            match_${{ matrix.safe_name }}.log
+            resume_py/match_${{ matrix.safe_name }}.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -163,7 +165,7 @@ jobs:
           name: output-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             output/
-            output/
+            resume_py/output/
           if-no-files-found: warn
           retention-days: 7
 
