@@ -108,12 +108,18 @@ jobs:
             --safe-name "${{ matrix.safe_name }}" \
             --out "${PROJECT_DIR}/configs/pipelines/${{ matrix.safe_name }}.json"
 
+      - name: Normalize Selenium selectors (auto)
+        run: |
+          python3 "${PROJECT_DIR}/update_selenium_selectors.py" \
+            --config "${PROJECT_DIR}/configs/pipelines/${{ matrix.safe_name }}.json" \
+            --apply
+
       - name: Run matcher (per pipeline config)
         timeout-minutes: 55
         env:
           SERPAPI_KEY: ${{ secrets.SERPAPI_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LLM_PROVIDER: "gemini"
           GEMINI_RESUME_MODEL: "gemini-2.5-flash"
           OPENAI_EMBED_MODEL: "text-embedding-3-small"
           PYTHONUNBUFFERED: "1"
