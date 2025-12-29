@@ -12,6 +12,10 @@ concurrency:
   group: job-matcher-pipelines
   cancel-in-progress: true
 
+defaults:
+  run:
+    working-directory: resume_py
+
 jobs:
   generate-matrix:
     runs-on: ubuntu-latest
@@ -73,7 +77,7 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: 'requirements.txt'
+          cache-dependency-path: 'resume_py/requirements.txt'
 
       - name: Install dependencies
         run: |
@@ -127,7 +131,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: match-log-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: match_${{ matrix.safe_name }}.log
+          path: resume_py/match_${{ matrix.safe_name }}.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -136,7 +140,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: output-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/
+          path: resume_py/output/
           if-no-files-found: warn
           retention-days: 7
 
