@@ -3,7 +3,7 @@
   "top": 10,
   "country": "usa",
   "job_type": "full-time",
-  "fetch_limit": 10,
+  "fetch_limit": 100,
   "min_score": 25,
   "min_match_score": 25,
   "top_per_company": true,
