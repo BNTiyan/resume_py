@@ -1,4 +1,5 @@
 import argparse
+import fnmatch
 import json
 import os
 import re
@@ -1355,7 +1356,9 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
     invalid_title_patterns = [
         "job at", "apply now", "here", "clear filters", "saved jobs", "search jobs",
         "create alert", "returning user", "login", "career site", "talent network",
-        "learn more", "read more", "view all", "see all", "internal career"
+        "learn more", "read more", "view all", "see all", "internal career",
+        # Common careers-site navigation headings that get scraped as "jobs"
+        "careers", "working here", "open positions", "key hiring areas", "explore open roles", "view all jobs globally"
     ]
     pre_invalid = len(fetched)
     fetched = [
@@ -1378,17 +1381,58 @@ def run_discovery(resume_text: str, resume_structured: dict, resolved_cfg: dict,
     # Add user-defined exclusions from config
     user_exclusions = resolved_cfg.get("exclude_titles") or []
     if user_exclusions and isinstance(user_exclusions, list):
-         print(f"[filter] Adding {len(user_exclusions)} user-defined exclusion patterns")
-         for pat in user_exclusions:
-             if pat and isinstance(pat, str):
-                 non_technical_patterns.append(pat.lower())
+        print(f"[filter] Adding {len(user_exclusions)} user-defined exclusion patterns")
+        for pat in user_exclusions:
+            if pat and isinstance(pat, str):
+                non_technical_patterns.append(pat)
+
+    def _matches_exclude_title(title: str, patterns: list[str]) -> bool:
+        """
+        Match title against patterns.
+
+        - Plain string: case-insensitive substring match
+        - Glob: supports *, ?, [] (case-insensitive), e.g. "*intern*", "*contract*"
+        - Regex: prefix with "re:", e.g. "re:^senior\\s+.*manager$"
+        """
+        t = (title or "").strip()
+        tl = t.lower()
+        for raw in patterns:
+            if not raw or not isinstance(raw, str):
+                continue
+            p = raw.strip()
+            if not p:
+                continue
+
+            pl = p.lower()
+
+            if pl.startswith("re:"):
+                expr = p[3:].strip()
+                if not expr:
+                    continue
+                try:
+                    if re.search(expr, t, flags=re.IGNORECASE):
+                        return True
+                except re.error:
+                    # If regex is invalid, degrade gracefully to substring behavior.
+                    if expr.lower() in tl:
+                        return True
+                continue
+
+            # Glob patterns (wildcards) — case-insensitive via lowercasing.
+            if any(ch in p for ch in ("*", "?", "[")):
+                if fnmatch.fnmatchcase(tl, pl):
+                    return True
+                continue
+
+            # Default: substring (current behavior)
+            if pl in tl:
+                return True
+
+        return False
     pre_non_tech = len(fetched)
     fetched = [
         j for j in fetched
-        if not any(
-            pattern in j.get("title", "").lower()
-            for pattern in non_technical_patterns
-        )
+        if not _matches_exclude_title(j.get("title", ""), non_technical_patterns)
     ]
     if pre_non_tech > len(fetched):
         print(f"[filter] Removed {pre_non_tech - len(fetched)} non-technical/retail positions")
@@ -1630,6 +1674,10 @@ def main() -> None:
             openai_model = (openai_cfg.get("model") or "").strip()
             openai_key = (openai_cfg.get("api_key") or os.getenv("OPENAI_API_KEY") or "").strip()
             gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
+            # Used throughout init logic to decide whether OpenAI is actually usable.
+            # IMPORTANT: Respect config openai.enabled; even if OPENAI_API_KEY exists,
+            # we treat OpenAI as unavailable when disabled in config.
+            can_use_openai = bool(use_openai and openai_key)
             # Determine provider: force gemini if openai disabled in config
             if use_openai and openai_key:
                 default_provider = "openai"
@@ -1738,7 +1786,8 @@ def main() -> None:
             # Auto-tailor resume and generate cover letter for jobs with score > 40
             auto_tailor = bool(resolved_cfg.get("auto_tailor_resume", False))
             tailor_threshold = int(resolved_cfg.get("tailor_threshold", 40))
-            enforced_tailor_threshold = max(tailor_threshold, 40)
+            # Respect user configuration. If you want fewer resumes, raise tailor_threshold in config.
+            enforced_tailor_threshold = tailor_threshold
             
             print(f"[config] auto_tailor_resume: {auto_tailor}")
             print(f"[config] tailor_threshold: {tailor_threshold}")

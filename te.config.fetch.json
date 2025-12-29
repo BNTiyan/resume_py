@@ -1,6 +1,6 @@
 {
     "resume": "input/resume.yml",
-    "top": 200,
+    "top": 10,
     "country": "usa",
     "fetch_limit": 2000,
     "min_score": 40,
@@ -284,7 +284,7 @@
             },
             {
                 "company": "continental",
-                "url": "https://jobs.continental.com/en/",
+                "url": "https://jobs.continental.com/en/?_gl=1*ehc0js*_ga*MTk3NzkxNzMzMS4xNzY3MDMxNzY2*_ga_CXY4Q1X5YZ*czE3NjcwMzE3NjUkbzEkZzEkdDE3NjcwMzE4MDMkajIyJGwwJGgw#/?sorting=cityLabel_stringS%20DESC&location=%7B%22title%22:%22United%20States%22,%22type%22:%22country%22,%22countryCode%22:%22us%22%7D&entryLevel_stringS=5129d659-3707-4b61-a6ed-8b1dc1b58f5d&fieldOfWork_stringS=3cbe67f1-8372-44a6-ac59-a0c113c0565f",
                 "list_selector": "a[href*='/job/'], a[href*='job'], li[class*='job'], div[class*='job'], article[class*='job']",
                 "title_selector": "a[href*='/job/'], a[href*='job'], h2, h3",
                 "location_selector": "span[class*='location'], div[class*='location'], [class*='location']",
@@ -312,7 +312,7 @@
             },
             {
                 "company": "aptiv",
-                "url": "https://www.aptiv.com/en/jobs/search",
+                "url": "https://www.aptiv.com/en/jobs/search?category=Hardware%20Engineering&category=Quality%20Engineering&category=Software%20Engineering&category=Systems%20Engineering%20&%20Project%20Management&category=Testing%20and%20Validation&country=United%20States",
                 "list_selector": "a[href*='/job/'], a[href*='job'], li[class*='job'], div[class*='job'], article[class*='job']",
                 "title_selector": "a[href*='/job/'], a[href*='job'], h2, h3",
                 "location_selector": "span[class*='location'], div[class*='location'], [class*='location']",
