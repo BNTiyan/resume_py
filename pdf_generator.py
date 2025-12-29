@@ -863,12 +863,16 @@ r45        Generate a professional 3-page resume PDF
             
             # Check if this looks like a company/position line (has | separator or bold markers)
             is_position_line = False
-            if '|' in line_stripped:
+            
+            # Helper to check if line looks like dates (months/years)
+            has_dates = any(month in line_stripped for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', '20']) or 'Present' in line_stripped or '–' in line_stripped or ('-' in line_stripped and any(month in line_stripped for month in ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']))
+
+            if '|' in line_stripped and not has_dates:
                 is_position_line = True
-            elif line_stripped.startswith('**') and line_stripped.endswith('**'):
+            elif line_stripped.startswith('**') and line_stripped.endswith('**') and not has_dates:
                 # Markdown bold - likely a position/company header
                 is_position_line = True
-            elif any(keyword in line_stripped.lower() for keyword in ['engineer', 'developer', 'manager', 'analyst', 'lead', 'architect', 'scientist', 'consultant', 'owner', 'master', 'scrum']) and len(line_stripped) < 100:
+            elif any(keyword in line_stripped.lower() for keyword in ['engineer', 'developer', 'manager', 'analyst', 'lead', 'architect', 'scientist', 'consultant', 'owner', 'master', 'scrum']) and len(line_stripped) < 100 and not has_dates:
                 # Short line with job keywords - likely position header
                 is_position_line = True
             
@@ -937,14 +941,18 @@ r45        Generate a professional 3-page resume PDF
             if not s:
                 continue
             if '|' in s:
-                # potential header
-                parts = [p.strip().replace('**','') for p in s.split('|')]
-                if len(parts) >= 2:
-                    # save previous
-                    if current and (current.get('position') or current.get('company')):
-                        results.append(current)
-                    current = {'position': ' | '.join(parts[:-1]), 'company': parts[-1], 'bullets': []}
-                    continue
+                # Check for dates before treating as header
+                has_dates = any(m in s for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Present']) or '–' in s or '-' in s
+                
+                if not has_dates:
+                    # potential header
+                    parts = [p.strip().replace('**','') for p in s.split('|')]
+                    if len(parts) >= 2:
+                        # save previous
+                        if current and (current.get('position') or current.get('company')):
+                            results.append(current)
+                        current = {'position': ' | '.join(parts[:-1]), 'company': parts[-1], 'bullets': []}
+                        continue
             # date/location
             if current and (any(m in s for m in ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec','Present']) or '–' in s or '-' in s):
                 if '|' in s:

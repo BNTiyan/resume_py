@@ -8,6 +8,7 @@ from datetime import datetime
 from urllib.parse import urljoin, urlparse
 from pathlib import Path
 from typing import Any, List, Tuple
+from threading import Lock
 from concurrent.futures import ThreadPoolExecutor, as_completed
 try:
     from dotenv import load_dotenv
@@ -1622,10 +1623,23 @@ def main() -> None:
             openai_model = (openai_cfg.get("model") or "").strip()
             openai_key = (openai_cfg.get("api_key") or os.getenv("OPENAI_API_KEY") or "").strip()
             gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
-            llm_provider = (os.getenv("LLM_PROVIDER") or ("openai" if openai_key else "gemini")).lower()
+            # Determine provider: force gemini if openai disabled in config
+            if use_openai and openai_key:
+                default_provider = "openai"
+            else:
+                default_provider = "gemini"
+            
+            llm_provider = (os.getenv("LLM_PROVIDER") or default_provider).lower()
+            
+            # If provider is explicitly set to openai in env but config says disabled, override it
+            if not use_openai and llm_provider == "openai":
+                llm_provider = "gemini"
             
             # Initialize JobApplicationGenerator (preferred method)
-            can_use_openai = use_openai and openai_key
+            # Force disable OpenAI if config says enabled=false, even if key exists
+            if not use_openai:
+                openai_key = ""
+
             use_job_app_gen = bool(resolved_cfg.get("use_job_app_generator", True)) and JOB_APP_GENERATOR_AVAILABLE and (can_use_openai or gemini_key)
             job_app_gen = None
             gemini_fallback_attempted = False
@@ -1662,7 +1676,7 @@ def main() -> None:
                 try:
                     provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
                     api_key = openai_key if provider == "openai" else gemini_key
-                    llm_resumer = LLMResumer(api_key)
+                    llm_resumer = LLMResumer(api_key, provider=provider)
                     llm_resumer.set_resume_data(resume_text)
                     llm_resumer_ready = True
                     use_llm_resumer = True
@@ -1676,7 +1690,7 @@ def main() -> None:
                 try:
                     provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
                     api_key = openai_key if provider == "openai" else gemini_key
-                    llm_cover = LLMCoverLetterJobDescription(api_key)
+                    llm_cover = LLMCoverLetterJobDescription(api_key, provider=provider)
                     llm_cover.set_resume(resume_text)
                     use_llm_cover = True
                     print(f"[llmcover] Using LLMCoverLetterJobDescription ({provider}) for cover letter generation")
@@ -1689,7 +1703,7 @@ def main() -> None:
                 try:
                     provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
                     api_key = openai_key if provider == "openai" else gemini_key
-                    job_desc_extractor = JobDescriptionExtractor(api_key)
+                    job_desc_extractor = JobDescriptionExtractor(api_key, provider=provider)
                     use_job_desc_extractor = True
                     print(f"[extractor] Using LLM-based job description extractor ({provider})")
                 except Exception as e:
@@ -1699,11 +1713,13 @@ def main() -> None:
             use_llm_parser = False
             llm_parser = None
             skip_embedding_parser = os.getenv("SKIP_EMBEDDING_PARSER", "false").lower() == "true"
-            if LLM_PARSER_AVAILABLE and can_use_openai and not skip_embedding_parser:
+            if LLM_PARSER_AVAILABLE and not skip_embedding_parser and (can_use_openai or gemini_key):
                 try:
-                    llm_parser = LLMParser(openai_key)
+                    provider = "openai" if (can_use_openai and llm_provider == "openai") else "gemini"
+                    api_key = openai_key if provider == "openai" else gemini_key
+                    llm_parser = LLMParser(api_key, provider=provider)
                     use_llm_parser = True
-                    print("[parser] Using LLMParser (RAG-based) for job description parsing")
+                    print(f"[parser] Using LLMParser (RAG-based) with {provider}")
                 except Exception as e:
                     print(f"[parser] Failed to initialize LLMParser: {e}. Falling back to extractor.")
             
@@ -2029,8 +2045,6 @@ def main() -> None:
                 print(f"[filter] ✅ Will generate cover letters and resumes for these {len(filtered_jobs)} jobs:")
                 for idx, j in enumerate(filtered_jobs, 1):
                     print(f"  {idx}. {j.get('company', 'N/A')} - {j.get('title', 'N/A')[:50]} (score: {j.get('score', 0):.1f})")
-            
-            # Pre-fetch job descriptions in parallel for speed
             def fetch_job_desc(job):
                 """Fetch and enrich job description in parallel."""
                 job_url = (job.get("url") or "").strip()
@@ -2145,440 +2159,581 @@ def main() -> None:
             # FAST MODE: If we just want discovery results, we can skip heavy LLM/Selenium parsing
             fast_mode = resolved_cfg.get("fast_discovery", True)
             
-            for idx, j in enumerate(filtered_jobs, 1):
-                score = j.get("score", 0)
-                company = _normalize_meta_field(j.get("company"))
-                if not company:
-                    source = j.get("source", "")
-                    if ":" in source:
-                        company = _normalize_meta_field(source.split(":")[-1].strip().title())
-                        j["company"] = company
-                company_label = company or "Company"
-                
-                role = _normalize_meta_field(j.get("title"))
-                if not role and j.get("original_title"):
-                    role = _normalize_meta_field(j.get("original_title"))
-                role_label = role or "Role"
-                
-                jd_text = (j.get("description") or "").strip()
-                job_url = (j.get("url") or "").strip()
-                base = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{company_label}_{role_label}")[:80]
-                key_primary = job_url or base
-                assets = job_assets.setdefault(key_primary, {"base": base})
-                if job_url:
-                    job_assets[job_url] = assets
-                assets["company"] = company
-                assets["role"] = role
-                llm_resume_generated = False
-                llm_resume_text = None
-                builder_tailored = builder
-                should_force_llm_resume = False
-                
-                # SPEED OPTIMIZATION: Skip deep parsing if we already have a description and are in fast mode
-                if fast_mode and jd_text and len(jd_text) > 200:
-                    print(f"  [speed] Skipping deep parsing for {company_label} (already have {len(jd_text)} chars)")
-                    assets["company"] = company
-                    assets["role"] = role
-                    continue # In discovery mode, we just want the list. Skip the rest of the loop for this job.
+            print_lock = Lock()
+            stats_lock = Lock()
+            gemini_fallback_attempted = False
 
-                html_parsed_info = {}
-                if (
-                    not jd_text # Only fetch if we don't have it
-                    and job_url
-                    and LLM_JOB_HTML_PARSER_AVAILABLE
-                    and use_openai
-                    and openai_key
-                ):
-                    try:
-                        print(f"  [parser-html] Fetching job posting for {company_label}...")
-                        headers = {
-                            "User-Agent": (
-                                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-                            )
-                        }
-                        resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
-                        resp.raise_for_status()
-                        html_content = resp.text
-                        job_html_parser = LLMJobHTMLParser(openai_key)
-                        job_html_parser.set_body_html(html_content)
-                        extracted_desc = job_html_parser.extract_job_description()
-                        if extracted_desc:
-                            jd_text = extracted_desc.strip()
-                            j["description"] = jd_text
-                            print(
-                                f"  [parser-html] Extracted description ({len(jd_text)} chars) for {company_label}"
-                            )
-                        else:
-                            print(
-                                f"  [parser-html] No description extracted for {company_label}"
-                            )
-
-                        try:
-                            html_parsed_info = {
-                                "company": job_html_parser.extract_company_name(),
-                                "role": job_html_parser.extract_role(),
-                                "location": job_html_parser.extract_location(),
-                                "description": job_html_parser.extract_job_description(),
-                                "required_skills": job_html_parser._extract_information(
-                                    "What are the required skills and responsibilities?",
-                                    "Responsibilities requirements"
-                                ),
-                            }
-                        except Exception:
-                            html_parsed_info = {}
-                    except Exception as e:
-                        print(
-                            f"  [parser-html] Failed to extract description for {company_label}: {e}"
-                        )
-
-                if html_parsed_info:
-                    if html_parsed_info.get("company"):
-                        company_from_html = _normalize_meta_field(html_parsed_info["company"])
-                        if company_from_html:
-                            company = company_from_html
-                            company_label = company
+            def process_job_concurrent(idx, j):
+                    nonlocal gemini_fallback_attempted, job_app_gen, llm_provider, llm_resumer
+                    score = j.get("score", 0)
+                    company = _normalize_meta_field(j.get("company"))
+                    if not company:
+                        source = j.get("source", "")
+                        if ":" in source:
+                            company = _normalize_meta_field(source.split(":")[-1].strip().title())
                             j["company"] = company
-                    if html_parsed_info.get("role"):
-                        role_from_html = _normalize_meta_field(html_parsed_info["role"])
-                        if role_from_html:
-                            role = role_from_html
-                            role_label = role
-                            j["title"] = role
-                    if html_parsed_info.get("location"):
-                        j["location"] = html_parsed_info["location"]
-                    if html_parsed_info.get("description") and not jd_text:
-                        jd_text = html_parsed_info["description"].strip()
-                        j["description"] = jd_text
-                    if html_parsed_info.get("required_skills"):
-                        j["parsed_required_skills"] = html_parsed_info["required_skills"].strip()
+                    company_label = company or "Company"
+                    
+                    role = _normalize_meta_field(j.get("title"))
+                    if not role and j.get("original_title"):
+                        role = _normalize_meta_field(j.get("original_title"))
+                    role_label = role or "Role"
+                    
+                    jd_text = (j.get("description") or "").strip()
+                    job_url = (j.get("url") or "").strip()
+                    base = re.sub(r"[^A-Za-z0-9._-]+", "_", f"{company_label}_{role_label}")[:80]
+                    key_primary = job_url or base
+                    with stats_lock: assets = job_assets.setdefault(key_primary, {"base": base})
+                    if job_url:
+                        job_assets[job_url] = assets
                     assets["company"] = company
                     assets["role"] = role
-                    company_label = company or company_label
-                    role_label = role or role_label
-
-                if (not jd_text or len(jd_text) < 200) and job_url:
-                    print(f"  [fetch] Job description too short, trying direct fetch from URL...")
-                    fallback_desc = fetch_job_description_plain(job_url)
-                    if fallback_desc:
-                        jd_text = fallback_desc
-                        j["description"] = jd_text
-                        print(f"  [fetch] Fetched {len(jd_text)} chars from URL")
-                
-                # If still no description and we have URL, use LLM extractor to fetch and parse
-                if (not jd_text or len(jd_text) < 100) and job_url and use_job_desc_extractor:
-                    try:
-                        print(f"  [extractor] Fetching page and extracting with LLM...")
-                        import requests
-                        headers = {
-                            "User-Agent": (
-                                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
-                            )
-                        }
-                        resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
-                        resp.raise_for_status()
-                        extracted = job_desc_extractor.extract_job_description(resp.text, company, role)
-                        if extracted and extracted.get("description"):
-                            # Build a comprehensive description from all extracted parts
-                            desc_parts = []
-                            if extracted.get("description"):
-                                desc_parts.append(extracted["description"])
-                            if extracted.get("responsibilities"):
-                                desc_parts.append("\n\nResponsibilities:\n" + extracted["responsibilities"])
-                            if extracted.get("minimum_qualifications"):
-                                desc_parts.append("\n\nMinimum Qualifications:\n" + extracted["minimum_qualifications"])
-                            if extracted.get("preferred_qualifications"):
-                                desc_parts.append("\n\nPreferred Qualifications:\n" + extracted["preferred_qualifications"])
-                            
-                            jd_text = "\n".join(desc_parts)
-                            j["description"] = jd_text
-                            print(f"  [extractor] Extracted comprehensive JD: {len(jd_text)} chars")
-                    except Exception as e:
-                        print(f"  [extractor] Failed to fetch/extract from URL: {e}")
-
-                # Debug: log job details with detailed info
-                has_url = "✅" if job_url else "❌ NO URL"
-                has_desc = f"✅ {len(jd_text)} chars" if jd_text else "❌ NO DESC"
-                print(f"[cover] {idx+1}/100: {company_label} - {role_label} | Score: {score:.1f} | URL: {has_url} | Desc: {has_desc}")
-                
-                # Check if visa sponsorship is available (disabled by default)
-                sponsorship_check_enabled = False  # Set to True to enable sponsorship filtering
-                has_sponsorship = check_sponsorship_available(jd_text, check_enabled=sponsorship_check_enabled)
-                if not has_sponsorship:
-                    print(f"  [skip] ⏭️ ❌ SPONSORSHIP: No visa sponsorship available for this position")
-                    print(f"       Company: {company_label} | Role: {role_label} | Score: {score}")
-                    filter_stats["sponsorship_blocked"] += 1
-                    continue
-                
-                # If we STILL don't have a description, create a minimal one from title/company
-                if not jd_text or len(jd_text) < 50:
-                    print(f"  WARNING: Job description too short or empty for {company}")
-                    print(f"  DEBUG: auto_tailor={auto_tailor}, use_job_app_gen={use_job_app_gen}")
-                    print(f"  DEBUG: Job URL: {job_url}")
+                    llm_resume_generated = False
+                    llm_resume_text = None
+                    builder_tailored = builder
+                    should_force_llm_resume = False
                     
-                    # Generate a minimal description to enable LLM generation
-                    if not jd_text:
-                        jd_text = f"Position: {role} at {company}. Location: {j.get('location', 'Not specified')}."
-                        if job_url:
-                            jd_text += f" Application URL: {job_url}"
-                        print(f"  [fallback] Created minimal JD from metadata: {len(jd_text)} chars")
-                        j["description"] = jd_text
-                
-                # Use LLM-based extractor (no embeddings) if RAG parser failed or unavailable
-                parsed_info = dict(html_parsed_info)
-                if use_job_desc_extractor and jd_text and not use_llm_parser:
-                    try:
-                        print(f"  [extractor] Extracting structured info for {company}...")
-                        extracted = job_desc_extractor.extract_job_description(jd_text, company, role)
+                    # SPEED OPTIMIZATION: Skip deep parsing if we already have a description and are in fast mode
+                    if fast_mode and jd_text and len(jd_text) > 200:
+                        with print_lock: print(f"  [speed] Skipping deep parsing for {company_label} (already have {len(jd_text)} chars)")
+                        assets["company"] = company
+                        assets["role"] = role
+                        return # In discovery mode, we just want the list. Skip the rest of the loop for this job.
+    
+                    html_parsed_info = {}
+                    if (
+                        not jd_text # Only fetch if we don't have it
+                        and job_url
+                        and LLM_JOB_HTML_PARSER_AVAILABLE
+                        and use_openai
+                        and openai_key
+                    ):
+                        try:
+                            with print_lock: print(f"  [parser-html] Fetching job posting for {company_label}...")
+                            headers = {
+                                "User-Agent": (
+                                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+                                )
+                            }
+                            resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
+                            resp.raise_for_status()
+                            html_content = resp.text
+                            job_html_parser = LLMJobHTMLParser(openai_key)
+                            job_html_parser.set_body_html(html_content)
+                            extracted_desc = job_html_parser.extract_job_description()
+                            if extracted_desc:
+                                jd_text = extracted_desc.strip()
+                                j["description"] = jd_text
+                                print(
+                                    f"  [parser-html] Extracted description ({len(jd_text)} chars) for {company_label}"
+                                )
+                            else:
+                                print(
+                                    f"  [parser-html] No description extracted for {company_label}"
+                                )
+    
+                            try:
+                                html_parsed_info = {
+                                    "company": job_html_parser.extract_company_name(),
+                                    "role": job_html_parser.extract_role(),
+                                    "location": job_html_parser.extract_location(),
+                                    "description": job_html_parser.extract_job_description(),
+                                    "required_skills": job_html_parser._extract_information(
+                                        "What are the required skills and responsibilities?",
+                                        "Responsibilities requirements"
+                                    ),
+                                }
+                            except Exception:
+                                html_parsed_info = {}
+                        except Exception as e:
+                            print(
+                                f"  [parser-html] Failed to extract description for {company_label}: {e}"
+                            )
+    
+                    if html_parsed_info:
+                        if html_parsed_info.get("company"):
+                            company_from_html = _normalize_meta_field(html_parsed_info["company"])
+                            if company_from_html:
+                                company = company_from_html
+                                company_label = company
+                                j["company"] = company
+                        if html_parsed_info.get("role"):
+                            role_from_html = _normalize_meta_field(html_parsed_info["role"])
+                            if role_from_html:
+                                role = role_from_html
+                                role_label = role
+                                j["title"] = role
+                        if html_parsed_info.get("location"):
+                            j["location"] = html_parsed_info["location"]
+                        if html_parsed_info.get("description") and not jd_text:
+                            jd_text = html_parsed_info["description"].strip()
+                            j["description"] = jd_text
+                        if html_parsed_info.get("required_skills"):
+                            j["parsed_required_skills"] = html_parsed_info["required_skills"].strip()
+                        assets["company"] = company
+                        assets["role"] = role
+                        company_label = company or company_label
+                        role_label = role or role_label
+    
+                    if (not jd_text or len(jd_text) < 200) and job_url:
+                        with print_lock: print(f"  [fetch] Job description too short, trying direct fetch from URL...")
+                        fallback_desc = fetch_job_description_plain(job_url)
+                        if fallback_desc:
+                            jd_text = fallback_desc
+                            j["description"] = jd_text
+                            with print_lock: print(f"  [fetch] Fetched {len(jd_text)} chars from URL")
+                    
+                    # If still no description and we have URL, use LLM extractor to fetch and parse
+                    if (not jd_text or len(jd_text) < 100) and job_url and use_job_desc_extractor:
+                        try:
+                            with print_lock: print(f"  [extractor] Fetching page and extracting with LLM...")
+                            import requests
+                            headers = {
+                                "User-Agent": (
+                                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                                    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+                                )
+                            }
+                            resp = requests.get(job_url, timeout=60, headers=headers)  # Increased from 30 to 60
+                            resp.raise_for_status()
+                            extracted = job_desc_extractor.extract_job_description(resp.text, company, role)
+                            if extracted and extracted.get("description"):
+                                # Build a comprehensive description from all extracted parts
+                                desc_parts = []
+                                if extracted.get("description"):
+                                    desc_parts.append(extracted["description"])
+                                if extracted.get("responsibilities"):
+                                    desc_parts.append("\n\nResponsibilities:\n" + extracted["responsibilities"])
+                                if extracted.get("minimum_qualifications"):
+                                    desc_parts.append("\n\nMinimum Qualifications:\n" + extracted["minimum_qualifications"])
+                                if extracted.get("preferred_qualifications"):
+                                    desc_parts.append("\n\nPreferred Qualifications:\n" + extracted["preferred_qualifications"])
+                                
+                                jd_text = "\n".join(desc_parts)
+                                j["description"] = jd_text
+                                with print_lock: print(f"  [extractor] Extracted comprehensive JD: {len(jd_text)} chars")
+                        except Exception as e:
+                            with print_lock: print(f"  [extractor] Failed to fetch/extract from URL: {e}")
+    
+                    # Debug: log job details with detailed info
+                    has_url = "✅" if job_url else "❌ NO URL"
+                    has_desc = f"✅ {len(jd_text)} chars" if jd_text else "❌ NO DESC"
+                    with print_lock: print(f"[cover] {idx+1}/100: {company_label} - {role_label} | Score: {score:.1f} | URL: {has_url} | Desc: {has_desc}")
+                    
+                    # Check if visa sponsorship is available (disabled by default)
+                    sponsorship_check_enabled = False  # Set to True to enable sponsorship filtering
+                    has_sponsorship = check_sponsorship_available(jd_text, check_enabled=sponsorship_check_enabled)
+                    if not has_sponsorship:
+                        with print_lock: print(f"  [skip] ⏭️ ❌ SPONSORSHIP: No visa sponsorship available for this position")
+                        with print_lock: print(f"       Company: {company_label} | Role: {role_label} | Score: {score}")
+                        with stats_lock: filter_stats["sponsorship_blocked"] += 1
+                        return
+                    
+                    # If we STILL don't have a description, create a minimal one from title/company
+                    if not jd_text or len(jd_text) < 50:
+                        with print_lock: print(f"  WARNING: Job description too short or empty for {company}")
+                        with print_lock: print(f"  DEBUG: auto_tailor={auto_tailor}, use_job_app_gen={use_job_app_gen}")
+                        with print_lock: print(f"  DEBUG: Job URL: {job_url}")
                         
-                        # Convert extracted format to parsed_info format
-                        if extracted:
-                            parsed_info["description"] = extracted.get("description", "")
-                            parsed_info["required_skills"] = extracted.get("responsibilities", "") + "\n" + extracted.get("minimum_qualifications", "")
-                            parsed_info["preferred_skills"] = extracted.get("preferred_qualifications", "")
+                        # Generate a minimal description to enable LLM generation
+                        if not jd_text:
+                            jd_text = f"Position: {role} at {company}. Location: {j.get('location', 'Not specified')}."
+                            if job_url:
+                                jd_text += f" Application URL: {job_url}"
+                            with print_lock: print(f"  [fallback] Created minimal JD from metadata: {len(jd_text)} chars")
+                            j["description"] = jd_text
+                    
+                    # Use LLM-based extractor (no embeddings) if RAG parser failed or unavailable
+                    parsed_info = dict(html_parsed_info)
+                    if use_job_desc_extractor and jd_text and not use_llm_parser:
+                        try:
+                            with print_lock: print(f"  [extractor] Extracting structured info for {company}...")
+                            extracted = job_desc_extractor.extract_job_description(jd_text, company, role)
                             
-                            # Save extracted info
-                            if extracted.get("description"):
+                            # Convert extracted format to parsed_info format
+                            if extracted:
+                                parsed_info["description"] = extracted.get("description", "")
+                                parsed_info["required_skills"] = extracted.get("responsibilities", "") + "\n" + extracted.get("minimum_qualifications", "")
+                                parsed_info["preferred_skills"] = extracted.get("preferred_qualifications", "")
+                                
+                                # Save extracted info
+                                if extracted.get("description"):
+                                    parsed_dir = out_file.parent / "parsed_jobs"
+                                    parsed_dir.mkdir(parents=True, exist_ok=True)
+                                    parsed_path = parsed_dir / f"extracted_{base}.txt"
+                                    with open(parsed_path, "w", encoding="utf-8") as f:
+                                        f.write(extracted.get("raw_structured", ""))
+                                    with print_lock: print(f"  [extractor] Saved structured info for {company}")
+                        except Exception as e:
+                            with print_lock: print(f"  [extractor] Error extracting {company}: {e}")
+                    
+                    # Use LLMParser to enrich job information if available
+                    if use_llm_parser and jd_text:
+                        try:
+                            with print_lock: print(f"  [parser] Parsing job description for {company}...")
+                            parsed_from_text = llm_parser.parse_job_from_text(jd_text)
+                            if parsed_from_text:
+                                parsed_info.update(parsed_from_text)
+                            
+                            # Update job fields with parsed information if better
+                            if parsed_info.get("company") and parsed_info["company"] != "Not specified":
+                                company = parsed_info["company"]
+                                j["company"] = company
+                            if parsed_info.get("role") and parsed_info["role"] != "Not specified":
+                                role = parsed_info["role"]
+                                j["title"] = role
+                            
+                            # Save parsed info
+                            if parsed_info:
                                 parsed_dir = out_file.parent / "parsed_jobs"
                                 parsed_dir.mkdir(parents=True, exist_ok=True)
-                                parsed_path = parsed_dir / f"extracted_{base}.txt"
+                                parsed_path = parsed_dir / f"parsed_{base}.txt"
                                 with open(parsed_path, "w", encoding="utf-8") as f:
-                                    f.write(extracted.get("raw_structured", ""))
-                                print(f"  [extractor] Saved structured info for {company}")
-                    except Exception as e:
-                        print(f"  [extractor] Error extracting {company}: {e}")
-                
-                # Use LLMParser to enrich job information if available
-                if use_llm_parser and jd_text:
-                    try:
-                        print(f"  [parser] Parsing job description for {company}...")
-                        parsed_from_text = llm_parser.parse_job_from_text(jd_text)
-                        if parsed_from_text:
-                            parsed_info.update(parsed_from_text)
-                        
-                        # Update job fields with parsed information if better
-                        if parsed_info.get("company") and parsed_info["company"] != "Not specified":
-                            company = parsed_info["company"]
-                            j["company"] = company
-                        if parsed_info.get("role") and parsed_info["role"] != "Not specified":
-                            role = parsed_info["role"]
-                            j["title"] = role
-                        
-                        # Save parsed info
-                        if parsed_info:
-                            parsed_dir = out_file.parent / "parsed_jobs"
-                            parsed_dir.mkdir(parents=True, exist_ok=True)
-                            parsed_path = parsed_dir / f"parsed_{base}.txt"
-                            with open(parsed_path, "w", encoding="utf-8") as f:
-                                f.write(f"Company: {parsed_info.get('company', 'N/A')}\n")
-                                f.write(f"Role: {parsed_info.get('role', 'N/A')}\n")
-                                f.write(f"Location: {parsed_info.get('location', 'N/A')}\n")
-                                f.write(f"Salary: {parsed_info.get('salary_range', 'N/A')}\n")
-                                f.write(f"Email: {parsed_info.get('recruiter_email', 'N/A')}\n\n")
-                                f.write(f"Required Skills:\n{parsed_info.get('required_skills', 'N/A')}\n\n")
-                                f.write(f"Preferred Skills:\n{parsed_info.get('preferred_skills', 'N/A')}\n\n")
-                                f.write(f"Description:\n{parsed_info.get('description', 'N/A')}\n")
-                    except Exception as e:
-                        print(f"  [parser] Error parsing {company}: {e}")
-                        # Fallback to extractor if parser fails
-                        if use_job_desc_extractor and not parsed_info:
-                            try:
-                                print(f"  [extractor] Trying extractor as fallback for {company}...")
-                                extracted = job_desc_extractor.extract_job_description(jd_text, company, role)
-                                if extracted:
-                                    parsed_info["description"] = extracted.get("description", "")
-                                    parsed_info["required_skills"] = extracted.get("responsibilities", "") + "\n" + extracted.get("minimum_qualifications", "")
-                                    parsed_info["preferred_skills"] = extracted.get("preferred_qualifications", "")
-                            except Exception:
-                                pass
-                
-                job_summary_override = ""
-                job_description_override = jd_text
-                job_keywords_override = ""
-                if parsed_info:
-                    job_summary_override = (parsed_info.get("description") or "").strip()
-                    if job_summary_override:
-                        job_description_override = job_summary_override
-                    skill_terms: list[str] = []
-                    for key in ("required_skills", "preferred_skills"):
-                        field_val = (parsed_info.get(key) or "").strip()
-                        if field_val:
-                            skill_terms.extend(
-                                kw.strip()
-                                for kw in re.split(r"[,\n;]", field_val)
-                                if kw.strip()
-                            )
-                    if skill_terms:
-                        seen_terms: list[str] = []
-                        for kw in skill_terms:
-                            if kw not in seen_terms:
-                                seen_terms.append(kw)
-                        job_keywords_override = ", ".join(seen_terms)
-                job_context_llm = {
-                    "job_summary": job_summary_override or job_description_override,
-                    "job_description": job_description_override,
-                    "job_keywords": job_keywords_override,
-                    "company": company,
-                    "role": role,
-                }
-                should_force_llm_resume = llm_resumer_ready and auto_tailor and bool(jd_text)
-                llm_cover_generated = False
-                
-                def write_llm_cover_letter() -> None:
-                    nonlocal llm_cover_generated, builder_tailored
-                    if llm_cover_generated:
-                        return
-                    if not (llm_resumer_ready and auto_tailor and jd_text):
-                        return
-                    try:
-                        cover_letter_llm = llm_resumer.generate_cover_letter(
-                            jd_text, company, role, job_context=job_context_llm
-                        ) if llm_resumer else None
-                        if cover_letter_llm:
-                            txt_path = letters_dir / f"cover_{base}.txt"
-                            with open(txt_path, "w", encoding="utf-8") as f:
-                                f.write(cover_letter_llm)
-                            llm_cover_generated = True
-                            builder_tailored = None
-                            assets["cover_letter"] = str(txt_path)
-                            print(f"  [llm] Cover letter saved for {company} using LLMResumer")
-                    except Exception as e:
-                        print(f"  [llm] Cover letter generation failed for {company}: {e}")
-                
-                # Method 1: JobApplicationGenerator (unified, preferred)
-                jobgen_success = False
-                jd_len = len(jd_text)
-                print(f"  [debug] Job processing for {company}:")
-                print(f"    - use_job_app_gen: {use_job_app_gen}")
-                print(f"    - auto_tailor: {auto_tailor}")
-                print(f"    - jd_len: {jd_len}")
-                print(f"    - job_url: {job_url}")
-                
-                if use_job_app_gen and auto_tailor and jd_text:
-                    try:
-                        print(f"\n  ✅ RESUME GENERATION ATTEMPT:")
-                        print(f"     - use_job_app_gen: {use_job_app_gen}")
-                        print(f"     - auto_tailor: {auto_tailor}")
-                        print(f"     - jd_text length: {len(jd_text)} chars")
-                        print(f"     - company: {company}")
-                        print(f"     - role: {role}")
-                        print(f"  [jobgen] Generating application package for {company}...")
-                        try:
-                            result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                                    f.write(f"Company: {parsed_info.get('company', 'N/A')}\n")
+                                    f.write(f"Role: {parsed_info.get('role', 'N/A')}\n")
+                                    f.write(f"Location: {parsed_info.get('location', 'N/A')}\n")
+                                    f.write(f"Salary: {parsed_info.get('salary_range', 'N/A')}\n")
+                                    f.write(f"Email: {parsed_info.get('recruiter_email', 'N/A')}\n\n")
+                                    f.write(f"Required Skills:\n{parsed_info.get('required_skills', 'N/A')}\n\n")
+                                    f.write(f"Preferred Skills:\n{parsed_info.get('preferred_skills', 'N/A')}\n\n")
+                                    f.write(f"Description:\n{parsed_info.get('description', 'N/A')}\n")
                         except Exception as e:
-                            msg = str(e).lower()
-                            if ("insufficient_quota" in msg or "exceeded your current quota" in msg or "429" in msg) and gemini_key and not gemini_fallback_attempted:
-                                print("  [jobgen] OpenAI quota exceeded. Attempting Gemini fallback...")
+                            with print_lock: print(f"  [parser] Error parsing {company}: {e}")
+                            # Fallback to extractor if parser fails
+                            if use_job_desc_extractor and not parsed_info:
                                 try:
-                                    fallback_gen = JobApplicationGenerator(api_key=gemini_key, provider="gemini")
-                                    fallback_gen.set_resume(resume_text)
-                                    job_app_gen = fallback_gen
-                                    llm_provider = "gemini"
-                                    gemini_fallback_attempted = True
-                                    result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
-                                except Exception as fallback_exc:
-                                    print(f"  [jobgen] Gemini fallback failed: {fallback_exc}")
+                                    with print_lock: print(f"  [extractor] Trying extractor as fallback for {company}...")
+                                    extracted = job_desc_extractor.extract_job_description(jd_text, company, role)
+                                    if extracted:
+                                        parsed_info["description"] = extracted.get("description", "")
+                                        parsed_info["required_skills"] = extracted.get("responsibilities", "") + "\n" + extracted.get("minimum_qualifications", "")
+                                        parsed_info["preferred_skills"] = extracted.get("preferred_qualifications", "")
+                                except Exception:
+                                    pass
+                    
+                    job_summary_override = ""
+                    job_description_override = jd_text
+                    job_keywords_override = ""
+                    if parsed_info:
+                        job_summary_override = (parsed_info.get("description") or "").strip()
+                        if job_summary_override:
+                            job_description_override = job_summary_override
+                        skill_terms: list[str] = []
+                        for key in ("required_skills", "preferred_skills"):
+                            field_val = (parsed_info.get(key) or "").strip()
+                            if field_val:
+                                skill_terms.extend(
+                                    kw.strip()
+                                    for kw in re.split(r"[,\n;]", field_val)
+                                    if kw.strip()
+                                )
+                        if skill_terms:
+                            seen_terms: list[str] = []
+                            for kw in skill_terms:
+                                if kw not in seen_terms:
+                                    seen_terms.append(kw)
+                            job_keywords_override = ", ".join(seen_terms)
+                    job_context_llm = {
+                        "job_summary": job_summary_override or job_description_override,
+                        "job_description": job_description_override,
+                        "job_keywords": job_keywords_override,
+                        "company": company,
+                        "role": role,
+                    }
+                    should_force_llm_resume = llm_resumer_ready and auto_tailor and bool(jd_text)
+                    llm_cover_generated = False
+                    
+                    def write_llm_cover_letter() -> None:
+                        nonlocal llm_cover_generated, builder_tailored
+                        if llm_cover_generated:
+                            return
+                        if not (llm_resumer_ready and auto_tailor and jd_text):
+                            return
+                        try:
+                            cover_letter_llm = llm_resumer.generate_cover_letter(
+                                jd_text, company, role, job_context=job_context_llm
+                            ) if llm_resumer else None
+                            if cover_letter_llm:
+                                txt_path = letters_dir / f"cover_{base}.txt"
+                                with open(txt_path, "w", encoding="utf-8") as f:
+                                    f.write(cover_letter_llm)
+                                llm_cover_generated = True
+                                builder_tailored = None
+                                assets["cover_letter"] = str(txt_path)
+                                with print_lock: print(f"  [llm] Cover letter saved for {company} using LLMResumer")
+                        except Exception as e:
+                            with print_lock: print(f"  [llm] Cover letter generation failed for {company}: {e}")
+                    
+                    # Method 1: JobApplicationGenerator (unified, preferred)
+                    jobgen_success = False
+                    jd_len = len(jd_text)
+                    with print_lock: print(f"  [debug] Job processing for {company}:")
+                    with print_lock: print(f"    - use_job_app_gen: {use_job_app_gen}")
+                    with print_lock: print(f"    - auto_tailor: {auto_tailor}")
+                    with print_lock: print(f"    - jd_len: {jd_len}")
+                    with print_lock: print(f"    - job_url: {job_url}")
+                    
+                    if use_job_app_gen and auto_tailor and jd_text:
+                        try:
+                            with print_lock: print(f"\n  ✅ RESUME GENERATION ATTEMPT:")
+                            with print_lock: print(f"     - use_job_app_gen: {use_job_app_gen}")
+                            with print_lock: print(f"     - auto_tailor: {auto_tailor}")
+                            with print_lock: print(f"     - jd_text length: {len(jd_text)} chars")
+                            with print_lock: print(f"     - company: {company}")
+                            with print_lock: print(f"     - role: {role}")
+                            with print_lock: print(f"  [jobgen] Generating application package for {company}...")
+                            try:
+                                result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                            except Exception as e:
+                                msg = str(e).lower()
+                                if ("insufficient_quota" in msg or "exceeded your current quota" in msg or "429" in msg) and gemini_key and not gemini_fallback_attempted:
+                                    with print_lock: print("  [jobgen] OpenAI quota exceeded. Attempting Gemini fallback...")
+                                    try:
+                                        fallback_gen = JobApplicationGenerator(api_key=gemini_key, provider="gemini")
+                                        fallback_gen.set_resume(resume_text)
+                                        job_app_gen = fallback_gen
+                                        llm_provider = "gemini"
+                                        gemini_fallback_attempted = True
+                                        result = job_app_gen.generate_application_package(jd_text, company, role, parallel=True)
+                                    except Exception as fallback_exc:
+                                        with print_lock: print(f"  [jobgen] Gemini fallback failed: {fallback_exc}")
+                                        raise
+                                else:
                                     raise
-                            else:
-                                raise
-                        
-                        # Save tailored resume (TXT)
-                        if result.get("resume"):
-                            resume_path = tailored_resumes_dir / f"resume_{base}.txt"
-                            with open(resume_path, "w", encoding="utf-8") as f:
-                                f.write(result["resume"])
-                            assets["resume"] = str(resume_path)
-                            filter_stats["created"] += 1
-                            print(f"  [jobgen] ✅ Resume saved: {resume_path.name}")
                             
-                            # Generate PDF and DOCX versions using helper
-                            # Read from saved file to ensure exact match
-                            try:
-                                from resume_upload_helper import create_and_save_resume_files
+                            # Save tailored resume (TXT)
+                            if result.get("resume"):
+                                resume_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                with open(resume_path, "w", encoding="utf-8") as f:
+                                    f.write(result["resume"])
+                                assets["resume"] = str(resume_path)
+                                with stats_lock: filter_stats["created"] += 1
+                                with print_lock: print(f"  [jobgen] ✅ Resume saved: {resume_path.name}")
                                 
-                                # Read exact content from saved file to ensure PDF matches text file exactly
-                                with open(resume_path, "r", encoding="utf-8") as f:
-                                    exact_resume_content = f.read()
-                                
-                                file_paths = create_and_save_resume_files(
-                                    resume_text=exact_resume_content,  # Use exact file content
-                                    output_dir=str(tailored_resumes_dir),
-                                    job_title=role,
-                                    company_name=company,
-                                    candidate_name="",  # Will be extracted from resume
-                                    formats=['pdf', 'docx']  # Generate both formats
-                                )
-                                if file_paths.get('docx'):
-                                    assets["resume_docx"] = file_paths['docx']
-                                    print(f"  [jobgen] ✅ Resume DOCX saved: {os.path.basename(file_paths['docx'])}")
-                                if file_paths.get('pdf'):
-                                    assets["resume_pdf"] = file_paths['pdf']
-                                    print(f"  [jobgen] ✅ Resume PDF saved: {os.path.basename(file_paths['pdf'])}")
-                            except Exception as pdf_err:
-                                print(f"  [jobgen] ⚠️  Document generation failed: {pdf_err}")
-                        
-                        # Save cover letter (TXT)
-                        if result.get("cover_letter"):
-                            txt_path = letters_dir / f"cover_{base}.txt"
-                            with open(txt_path, "w", encoding="utf-8") as f:
-                                f.write(result["cover_letter"])
-                            assets["cover_letter"] = str(txt_path)
-                            print(f"  [jobgen] ✅ Cover letter saved: {txt_path.name}")
+                                # Generate PDF and DOCX versions using helper
+                                # Read from saved file to ensure exact match
+                                try:
+                                    from resume_upload_helper import create_and_save_resume_files
+                                    
+                                    # Read exact content from saved file to ensure PDF matches text file exactly
+                                    with open(resume_path, "r", encoding="utf-8") as f:
+                                        exact_resume_content = f.read()
+                                    
+                                    file_paths = create_and_save_resume_files(
+                                        resume_text=exact_resume_content,  # Use exact file content
+                                        output_dir=str(tailored_resumes_dir),
+                                        job_title=role,
+                                        company_name=company,
+                                        candidate_name="",  # Will be extracted from resume
+                                        formats=['pdf', 'docx']  # Generate both formats
+                                    )
+                                    if file_paths.get('docx'):
+                                        assets["resume_docx"] = file_paths['docx']
+                                        with print_lock: print(f"  [jobgen] ✅ Resume DOCX saved: {os.path.basename(file_paths['docx'])}")
+                                    if file_paths.get('pdf'):
+                                        assets["resume_pdf"] = file_paths['pdf']
+                                        with print_lock: print(f"  [jobgen] ✅ Resume PDF saved: {os.path.basename(file_paths['pdf'])}")
+                                except Exception as pdf_err:
+                                    with print_lock: print(f"  [jobgen] ⚠️  Document generation failed: {pdf_err}")
                             
-                            # Generate PDF version using helper
+                            # Save cover letter (TXT)
+                            if result.get("cover_letter"):
+                                txt_path = letters_dir / f"cover_{base}.txt"
+                                with open(txt_path, "w", encoding="utf-8") as f:
+                                    f.write(result["cover_letter"])
+                                assets["cover_letter"] = str(txt_path)
+                                with print_lock: print(f"  [jobgen] ✅ Cover letter saved: {txt_path.name}")
+                                
+                                # Generate PDF version using helper
+                                try:
+                                    from resume_upload_helper import create_and_save_cover_letter_pdf
+                                    pdf_path_abs = create_and_save_cover_letter_pdf(
+                                        cover_letter_text=result["cover_letter"],
+                                        output_dir=str(letters_dir),
+                                        job_title=role,
+                                        company_name=company,
+                                        candidate_name="",
+                                        candidate_email="",
+                                        candidate_phone=""
+                                    )
+                                    if pdf_path_abs:
+                                        assets["cover_letter_pdf"] = pdf_path_abs
+                                        with print_lock: print(f"  [jobgen] ✅ Cover letter PDF saved: {os.path.basename(pdf_path_abs)}")
+                                except Exception as pdf_err:
+                                    with print_lock: print(f"  [jobgen] ⚠️  PDF generation failed: {pdf_err}")
+                            
+                            # Optionally save job summary
+                            if result.get("job_summary"):
+                                summary_dir = out_file.parent / "job_summaries"
+                                summary_dir.mkdir(parents=True, exist_ok=True)
+                                summary_path = summary_dir / f"summary_{base}.txt"
+                                with open(summary_path, "w", encoding="utf-8") as f:
+                                    f.write(result["job_summary"])
+                                assets["job_summary"] = str(summary_path)
+                                with print_lock: print(f"  [jobgen] ✅ Job summary saved: {summary_path.name}")
+                            
+                            jobgen_success = True
+                        except Exception as e:
+                            with print_lock: print(f"  [jobgen] ❌ Error for {company}: {e}. Falling back.")
+                    if not jobgen_success:
+                        # Fallback to standard generation if LLM generation skipped/failed
+                        with print_lock: print(f"  [fallback] Using standard generation for {company_label}...")
+                        from pdf_generator import generate_resume_pdf
+                        from docx_generator import generate_resume_docx
+                        
+                        pdf_out = tailored_resumes_dir / f"resume_{base}.pdf"
+                        docx_out = tailored_resumes_dir / f"resume_{base}.docx"
+                        
+                        try:
+                            generate_resume_pdf(resume_text, str(pdf_out), structured=resume_structured)
+                            assets["resume_pdf"] = str(pdf_out)
+                            with print_lock: print(f"  [fallback] ✅ Resume PDF saved: {pdf_out.name}")
+                        except Exception as e:
+                            with print_lock: print(f"  [fallback] ⚠️ PDF failed: {e}")
+                            
+                        try:
+                            generate_resume_docx(resume_text, str(docx_out), structured=resume_structured)
+                            assets["resume_docx"] = str(docx_out)
+                            with print_lock: print(f"  [fallback] ✅ Resume DOCX saved: {docx_out.name}")
+                        except Exception as e:
+                            with print_lock: print(f"  [fallback] ⚠️ DOCX failed: {e}")
+                        if should_force_llm_resume and not llm_resume_generated:
                             try:
-                                from resume_upload_helper import create_and_save_cover_letter_pdf
-                                pdf_path_abs = create_and_save_cover_letter_pdf(
-                                    cover_letter_text=result["cover_letter"],
-                                    output_dir=str(letters_dir),
-                                    job_title=role,
-                                    company_name=company,
-                                    candidate_name="",
-                                    candidate_email="",
-                                    candidate_phone=""
+                                llm_resume_text = (
+                                    llm_resumer.generate_tailored_resume(
+                                        jd_text, company, role, job_context=job_context_llm
+                                    )
+                                    if llm_resumer
+                                    else None
                                 )
-                                if pdf_path_abs:
-                                    assets["cover_letter_pdf"] = pdf_path_abs
-                                    print(f"  [jobgen] ✅ Cover letter PDF saved: {os.path.basename(pdf_path_abs)}")
-                            except Exception as pdf_err:
-                                print(f"  [jobgen] ⚠️  PDF generation failed: {pdf_err}")
-                        
-                        # Optionally save job summary
-                        if result.get("job_summary"):
-                            summary_dir = out_file.parent / "job_summaries"
-                            summary_dir.mkdir(parents=True, exist_ok=True)
-                            summary_path = summary_dir / f"summary_{base}.txt"
-                            with open(summary_path, "w", encoding="utf-8") as f:
-                                f.write(result["job_summary"])
-                            assets["job_summary"] = str(summary_path)
-                            print(f"  [jobgen] ✅ Job summary saved: {summary_path.name}")
-                        
-                        jobgen_success = True
-                    except Exception as e:
-                        print(f"  [jobgen] ❌ Error for {company}: {e}. Falling back.")
-                if not jobgen_success:
-                    # Fallback to standard generation if LLM generation skipped/failed
-                    print(f"  [fallback] Using standard generation for {company_label}...")
-                    from pdf_generator import generate_resume_pdf
-                    from docx_generator import generate_resume_docx
+                                if llm_resume_text:
+                                    resume_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                    with open(resume_path, "w", encoding="utf-8") as f:
+                                        f.write(llm_resume_text)
+                                    llm_resume_generated = True
+                                    with print_lock: print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                                    assets["resume"] = str(resume_path)
+                            except Exception as e:
+                                with print_lock: print(f"  [llm] Tailored resume generation failed for {company}: {e}")
+                        write_llm_cover_letter()
+                        return  # Skip to next job
                     
-                    pdf_out = tailored_resumes_dir / f"resume_{base}.pdf"
-                    docx_out = tailored_resumes_dir / f"resume_{base}.docx"
+                    # Method 2: LLMResumer (parallel resume + cover letter generation)
+                    if use_llm_resumer and auto_tailor and jd_text:
+                        try:
+                            with print_lock: print(f"  [llm] Generating resume + cover letter for {company} using LangChain...")
+                            resume_text_llm = llm_resumer.generate_tailored_resume(
+                                jd_text, company, role, job_context=job_context_llm
+                            )
+                            cover_letter_llm = llm_resumer.generate_cover_letter(
+                                jd_text, company, role, job_context=job_context_llm
+                            )
+                            
+                            if resume_text_llm:
+                                resume_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                with open(resume_path, "w", encoding="utf-8") as f:
+                                    f.write(resume_text_llm)
+                                llm_resume_text = resume_text_llm
+                                llm_resume_generated = True
+                                assets["resume"] = str(resume_path)
+                                with stats_lock: filter_stats["created"] += 1
+                                with print_lock: print(f"  [llm] ✅ Resume saved: {resume_path.name}")
+                                
+                                # Generate PDF version - read from saved text file to ensure exact match
+                                try:
+                                    from pdf_generator import generate_resume_pdf
+                                    pdf_path = tailored_resumes_dir / f"resume_{base}.pdf"
+                                    
+                                    # Read the exact text file content to ensure PDF matches
+                                    with open(resume_path, "r", encoding="utf-8") as f:
+                                        exact_resume_text = f.read()
+                                    
+                                    success = generate_resume_pdf(
+                                        content=exact_resume_text,  # Use exact file content
+                                        output_path=str(pdf_path),
+                                        job_title=role,
+                                        company_name=company,
+                                        candidate_name=""
+                                    )
+                                    if success:
+                                        assets["resume_pdf"] = str(pdf_path)
+                                        with print_lock: print(f"  [llm] ✅ Resume PDF saved: {pdf_path.name}")
+                                except Exception as pdf_err:
+                                    with print_lock: print(f"  [llm] ⚠️  PDF generation failed: {pdf_err}")
+                                    import traceback
+                                    with print_lock: print(f"  [llm] Traceback: {traceback.format_exc()[:300]}")
+                            
+                            if cover_letter_llm:
+                                txt_path = letters_dir / f"cover_{base}.txt"
+                                with open(txt_path, "w", encoding="utf-8") as f:
+                                    f.write(cover_letter_llm)
+                                llm_cover_generated = True
+                                builder_tailored = None
+                                assets["cover_letter"] = str(txt_path)
+                                with print_lock: print(f"  [llm] ✅ Cover letter saved: {txt_path.name}")
+                                
+                                # Generate PDF version
+                                try:
+                                    from pdf_generator import generate_cover_letter_pdf
+                                    pdf_path = letters_dir / f"cover_{base}.pdf"
+                                    success = generate_cover_letter_pdf(
+                                        content=cover_letter_llm,
+                                        output_path=str(pdf_path),
+                                        job_title=role,
+                                        company_name=company,
+                                        candidate_name="",
+                                        candidate_email="",
+                                        candidate_phone=""
+                                    )
+                                    if success:
+                                        assets["cover_letter_pdf"] = str(pdf_path)
+                                        with print_lock: print(f"  [llm] ✅ Cover letter PDF saved: {pdf_path.name}")
+                                except Exception as pdf_err:
+                                    with print_lock: print(f"  [llm] ⚠️  PDF generation failed: {pdf_err}")
+                            
+                            return  # Skip to next job
+                        except Exception as e:
+                            with print_lock: print(f"  [llm] Error for {company}: {e}. Falling back to standard method.")
                     
-                    try:
-                        generate_resume_pdf(resume_text, str(pdf_out), structured=resume_structured)
-                        assets["resume_pdf"] = str(pdf_out)
-                        print(f"  [fallback] ✅ Resume PDF saved: {pdf_out.name}")
-                    except Exception as e:
-                        print(f"  [fallback] ⚠️ PDF failed: {e}")
-                        
-                    try:
-                        generate_resume_docx(resume_text, str(docx_out), structured=resume_structured)
-                        assets["resume_docx"] = str(docx_out)
-                        print(f"  [fallback] ✅ Resume DOCX saved: {docx_out.name}")
-                    except Exception as e:
-                        print(f"  [fallback] ⚠️ DOCX failed: {e}")
+                    # Fallback: Standard resume tailoring (if score > threshold)
+                    builder_tailored = builder
+                    if auto_tailor and RESUME_BUILDER_AVAILABLE and score >= enforced_tailor_threshold and jd_text:
+                        try:
+                            tailored_text = tailor_resume_for_job(
+                                resume_text, jd_text, company, role, openai_model, openai_key
+                            )
+                            if tailored_text and tailored_text != resume_text:
+                                tailored_doc = build_tailored_resume_doc(tailored_text)
+                                resume_path = tailored_resumes_dir / f"resume_{base}.docx"
+                                tailored_doc.save(resume_path)
+                                assets["resume"] = str(resume_path)
+                                if should_force_llm_resume and not llm_resume_generated:
+                                    try:
+                                        llm_resume_text = (
+                                            llm_resumer.generate_tailored_resume(
+                                                jd_text, company, role, job_context=job_context_llm
+                                            )
+                                            if llm_resumer
+                                            else None
+                                        )
+                                        if llm_resume_text:
+                                            resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                            with open(resume_txt_path, "w", encoding="utf-8") as f:
+                                                f.write(llm_resume_text)
+                                            llm_resume_generated = True
+                                            with print_lock: print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                                            assets["resume"] = str(resume_txt_path)
+                                    except Exception as e:
+                                        with print_lock: print(f"  [llm] Tailored resume generation failed for {company}: {e}")
+                                if COVER_LETTER_AVAILABLE:
+                                    if llm_resume_generated and llm_resume_text:
+                                        builder_tailored = CoverLetterBuilder(llm_resume_text, name_line)
+                                    else:
+                                        builder_tailored = CoverLetterBuilder(tailored_text, name_line)
+                        except Exception as e:
+                            with print_lock: print(f"[resume_tailor] error for {company}: {e}")
+                    
                     if should_force_llm_resume and not llm_resume_generated:
                         try:
                             llm_resume_text = (
@@ -2589,184 +2744,60 @@ def main() -> None:
                                 else None
                             )
                             if llm_resume_text:
-                                resume_path = tailored_resumes_dir / f"resume_{base}.txt"
-                                with open(resume_path, "w", encoding="utf-8") as f:
+                                resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
+                                with open(resume_txt_path, "w", encoding="utf-8") as f:
                                     f.write(llm_resume_text)
                                 llm_resume_generated = True
-                                print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
-                                assets["resume"] = str(resume_path)
-                        except Exception as e:
-                            print(f"  [llm] Tailored resume generation failed for {company}: {e}")
-                    write_llm_cover_letter()
-                    continue  # Skip to next job
-                
-                # Method 2: LLMResumer (parallel resume + cover letter generation)
-                if use_llm_resumer and auto_tailor and jd_text:
-                    try:
-                        print(f"  [llm] Generating resume + cover letter for {company} using LangChain...")
-                        resume_text_llm = llm_resumer.generate_tailored_resume(
-                            jd_text, company, role, job_context=job_context_llm
-                        )
-                        cover_letter_llm = llm_resumer.generate_cover_letter(
-                            jd_text, company, role, job_context=job_context_llm
-                        )
-                        
-                        if resume_text_llm:
-                            resume_path = tailored_resumes_dir / f"resume_{base}.txt"
-                            with open(resume_path, "w", encoding="utf-8") as f:
-                                f.write(resume_text_llm)
-                            llm_resume_text = resume_text_llm
-                            llm_resume_generated = True
-                            assets["resume"] = str(resume_path)
-                            filter_stats["created"] += 1
-                            print(f"  [llm] ✅ Resume saved: {resume_path.name}")
-                            
-                            # Generate PDF version - read from saved text file to ensure exact match
-                            try:
-                                from pdf_generator import generate_resume_pdf
-                                pdf_path = tailored_resumes_dir / f"resume_{base}.pdf"
-                                
-                                # Read the exact text file content to ensure PDF matches
-                                with open(resume_path, "r", encoding="utf-8") as f:
-                                    exact_resume_text = f.read()
-                                
-                                success = generate_resume_pdf(
-                                    content=exact_resume_text,  # Use exact file content
-                                    output_path=str(pdf_path),
-                                    job_title=role,
-                                    company_name=company,
-                                    candidate_name=""
-                                )
-                                if success:
-                                    assets["resume_pdf"] = str(pdf_path)
-                                    print(f"  [llm] ✅ Resume PDF saved: {pdf_path.name}")
-                            except Exception as pdf_err:
-                                print(f"  [llm] ⚠️  PDF generation failed: {pdf_err}")
-                                import traceback
-                                print(f"  [llm] Traceback: {traceback.format_exc()[:300]}")
-                        
-                        if cover_letter_llm:
-                            txt_path = letters_dir / f"cover_{base}.txt"
-                            with open(txt_path, "w", encoding="utf-8") as f:
-                                f.write(cover_letter_llm)
-                            llm_cover_generated = True
-                            builder_tailored = None
-                            assets["cover_letter"] = str(txt_path)
-                            print(f"  [llm] ✅ Cover letter saved: {txt_path.name}")
-                            
-                            # Generate PDF version
-                            try:
-                                from pdf_generator import generate_cover_letter_pdf
-                                pdf_path = letters_dir / f"cover_{base}.pdf"
-                                success = generate_cover_letter_pdf(
-                                    content=cover_letter_llm,
-                                    output_path=str(pdf_path),
-                                    job_title=role,
-                                    company_name=company,
-                                    candidate_name="",
-                                    candidate_email="",
-                                    candidate_phone=""
-                                )
-                                if success:
-                                    assets["cover_letter_pdf"] = str(pdf_path)
-                                    print(f"  [llm] ✅ Cover letter PDF saved: {pdf_path.name}")
-                            except Exception as pdf_err:
-                                print(f"  [llm] ⚠️  PDF generation failed: {pdf_err}")
-                        
-                        continue  # Skip to next job
-                    except Exception as e:
-                        print(f"  [llm] Error for {company}: {e}. Falling back to standard method.")
-                
-                # Fallback: Standard resume tailoring (if score > threshold)
-                builder_tailored = builder
-                if auto_tailor and RESUME_BUILDER_AVAILABLE and score >= enforced_tailor_threshold and jd_text:
-                    try:
-                        tailored_text = tailor_resume_for_job(
-                            resume_text, jd_text, company, role, openai_model, openai_key
-                        )
-                        if tailored_text and tailored_text != resume_text:
-                            tailored_doc = build_tailored_resume_doc(tailored_text)
-                            resume_path = tailored_resumes_dir / f"resume_{base}.docx"
-                            tailored_doc.save(resume_path)
-                            assets["resume"] = str(resume_path)
-                            if should_force_llm_resume and not llm_resume_generated:
-                                try:
-                                    llm_resume_text = (
-                                        llm_resumer.generate_tailored_resume(
-                                            jd_text, company, role, job_context=job_context_llm
-                                        )
-                                        if llm_resumer
-                                        else None
-                                    )
-                                    if llm_resume_text:
-                                        resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
-                                        with open(resume_txt_path, "w", encoding="utf-8") as f:
-                                            f.write(llm_resume_text)
-                                        llm_resume_generated = True
-                                        print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
-                                        assets["resume"] = str(resume_txt_path)
-                                except Exception as e:
-                                    print(f"  [llm] Tailored resume generation failed for {company}: {e}")
-                            if COVER_LETTER_AVAILABLE:
-                                if llm_resume_generated and llm_resume_text:
+                                with print_lock: print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
+                                assets["resume"] = str(resume_txt_path)
+                                if COVER_LETTER_AVAILABLE:
                                     builder_tailored = CoverLetterBuilder(llm_resume_text, name_line)
-                                else:
-                                    builder_tailored = CoverLetterBuilder(tailored_text, name_line)
-                    except Exception as e:
-                        print(f"[resume_tailor] error for {company}: {e}")
-                
-                if should_force_llm_resume and not llm_resume_generated:
-                    try:
-                        llm_resume_text = (
-                            llm_resumer.generate_tailored_resume(
-                                jd_text, company, role, job_context=job_context_llm
-                            )
-                            if llm_resumer
-                            else None
-                        )
-                        if llm_resume_text:
-                            resume_txt_path = tailored_resumes_dir / f"resume_{base}.txt"
-                            with open(resume_txt_path, "w", encoding="utf-8") as f:
-                                f.write(llm_resume_text)
-                            llm_resume_generated = True
-                            print(f"  [llm] Tailored resume saved for {company} using LLMResumer")
-                            assets["resume"] = str(resume_txt_path)
-                            if COVER_LETTER_AVAILABLE:
-                                builder_tailored = CoverLetterBuilder(llm_resume_text, name_line)
-                    except Exception as e:
-                        print(f"  [llm] Tailored resume generation failed for {company}: {e}")
-                
-                write_llm_cover_letter()
-                
-                # Method 3: LLMCoverLetterJobDescription (cover letter only)
-                if not llm_cover_generated and use_llm_cover and jd_text:
-                    try:
-                        print(f"  [llmcover] Generating cover letter for {company} using LangChain...")
-                        resume_for_letter = llm_resume_text if llm_resume_text else resume_text
-                        letter_txt = llm_cover.generate_from_job_and_resume(jd_text, resume_for_letter)
+                        except Exception as e:
+                            with print_lock: print(f"  [llm] Tailored resume generation failed for {company}: {e}")
+                    
+                    write_llm_cover_letter()
+                    
+                    # Method 3: LLMCoverLetterJobDescription (cover letter only)
+                    if not llm_cover_generated and use_llm_cover and jd_text:
+                        try:
+                            with print_lock: print(f"  [llmcover] Generating cover letter for {company} using LangChain...")
+                            resume_for_letter = llm_resume_text if llm_resume_text else resume_text
+                            letter_txt = llm_cover.generate_from_job_and_resume(jd_text, resume_for_letter)
+                            if letter_txt:
+                                txt_path = letters_dir / f"cover_{base}.txt"
+                                with open(txt_path, "w", encoding="utf-8") as f:
+                                    f.write(letter_txt)
+                                assets["cover_letter"] = str(txt_path)
+                                return  # Skip to next job
+                        except Exception as e:
+                            with print_lock: print(f"  [llmcover] Error for {company}: {e}. Falling back.")
+                    
+                    # Compose cover letter using standard method
+                    if not llm_cover_generated:
+                        letter_txt = None
+                        if builder_tailored and use_openai and openai_key:
+                            letter_txt = builder_tailored.compose_openai_text(jd_text, company, role, openai_model, openai_key)
+                        if not letter_txt and builder_tailored:
+                            letter_txt = builder_tailored.compose_concise_text(jd_text, company, role)
+                    
                         if letter_txt:
                             txt_path = letters_dir / f"cover_{base}.txt"
                             with open(txt_path, "w", encoding="utf-8") as f:
                                 f.write(letter_txt)
                             assets["cover_letter"] = str(txt_path)
-                            continue  # Skip to next job
+                
+
+            # Parallel Execution
+            max_workers = int(resolved_cfg.get('parallel_workers', 5))
+            print(f'[parallel] Starting generation with {max_workers} workers...')
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                futures = [executor.submit(process_job_concurrent, idx, j) for idx, j in enumerate(filtered_jobs, 1)]
+                for future in as_completed(futures):
+                    try:
+                        future.result()
                     except Exception as e:
-                        print(f"  [llmcover] Error for {company}: {e}. Falling back.")
-                
-                # Compose cover letter using standard method
-                if not llm_cover_generated:
-                    letter_txt = None
-                    if builder_tailored and use_openai and openai_key:
-                        letter_txt = builder_tailored.compose_openai_text(jd_text, company, role, openai_model, openai_key)
-                    if not letter_txt and builder_tailored:
-                        letter_txt = builder_tailored.compose_concise_text(jd_text, company, role)
-                
-                    if letter_txt:
-                        txt_path = letters_dir / f"cover_{base}.txt"
-                        with open(txt_path, "w", encoding="utf-8") as f:
-                            f.write(letter_txt)
-                        assets["cover_letter"] = str(txt_path)
-            
+                        with print_lock:
+                            print(f'[parallel] Job failed: {e}')
             print(f"[cover] generated cover letters in {letters_dir}")
             if auto_tailor:
                 print(f"[resume] generated tailored resumes in {tailored_resumes_dir}")

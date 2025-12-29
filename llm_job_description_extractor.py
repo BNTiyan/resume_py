@@ -52,11 +52,11 @@ class JobDescriptionExtractor:
         ]
     }
     
-    def __init__(self, api_key: Optional[str] = None):
-        openai_key = api_key or os.getenv("OPENAI_API_KEY")
-        gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+    def __init__(self, api_key: Optional[str] = None, provider: Optional[str] = None):
+        self.provider = (provider or os.getenv("LLM_PROVIDER", "openai")).lower()
+        openai_key = api_key if self.provider == "openai" else os.getenv("OPENAI_API_KEY")
+        gemini_key = api_key if self.provider == "gemini" else os.getenv("GEMINI_API_KEY")
         
-        self.provider = os.getenv("LLM_PROVIDER", "openai").lower()
         if self.provider == "openai" and not openai_key:
             if gemini_key:
                 self.provider = "gemini"

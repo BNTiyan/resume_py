@@ -39,18 +39,47 @@ logger.add(log_path / "gpt_resume.log", rotation="1 day", compression="zip", ret
 
 
 class LLMParser:
-    def __init__(self, openai_api_key):
-        embedding_model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002")
-        self.llm = LoggerChatModel(
-            ChatOpenAI(
-                model="gpt-4o-mini", api_key=openai_api_key, temperature=0.4
+    def __init__(self, api_key, provider="openai"):
+        self.provider = provider.lower()
+        self.vectorstore = None
+        
+        if self.provider == "gemini":
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI, GoogleGenerativeAIEmbeddings
+            except ImportError:
+                 raise ImportError("langchain-google-genai is required for Gemini provider")
+            
+            gemini_key = api_key or os.getenv("GEMINI_API_KEY")
+            if not gemini_key:
+                 raise ValueError("Gemini API key is required")
+            
+            self.llm = LoggerChatModel(
+                ChatGoogleGenerativeAI(
+                    model="gemini-1.5-flash",
+                    google_api_key=gemini_key,
+                    temperature=0.4
+                )
             )
-        )
-        self.llm_embeddings = OpenAIEmbeddings(
-            model=embedding_model,
-            api_key=openai_api_key,
-        )  # Initialize embeddings
-        self.vectorstore = None  # Will be initialized after document loading
+            self.llm_embeddings = GoogleGenerativeAIEmbeddings(
+                model="models/embedding-001",
+                google_api_key=gemini_key
+            )
+        else:
+            # Default to OpenAI
+            openai_key = api_key or os.getenv("OPENAI_API_KEY")
+            if not openai_key:
+                 raise ValueError("OpenAI API key is required")
+            
+            embedding_model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002")
+            self.llm = LoggerChatModel(
+                ChatOpenAI(
+                    model="gpt-4o-mini", api_key=openai_key, temperature=0.4
+                )
+            )
+            self.llm_embeddings = OpenAIEmbeddings(
+                model=embedding_model,
+                api_key=openai_key,
+            )
 
     @staticmethod
     def _preprocess_template_string(template: str) -> str:

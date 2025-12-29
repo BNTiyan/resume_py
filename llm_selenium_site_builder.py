@@ -122,9 +122,30 @@ def generate_selenium_site_entries(companies: List[str]) -> List[Dict[str, Any]]
     if not companies:
         return []
 
+    # Check config.json to see if OpenAI is enabled
+    openai_enabled_in_config = True
+    try:
+        config_path = Path(__file__).parent / "config.json"
+        if config_path.exists():
+            with open(config_path, "r", encoding="utf-8") as f:
+                config = json.load(f)
+                openai_cfg = config.get("openai") or {}
+                openai_enabled_in_config = bool(openai_cfg.get("enabled", True))
+    except Exception:
+        pass  # If config read fails, fall back to checking environment variables
+
     openai_key = os.getenv("OPENAI_API_KEY", "").strip()
     gemini_key = os.getenv("GEMINI_API_KEY", "").strip()
     provider = os.getenv("LLM_PROVIDER", "openai").lower()
+    
+    # If OpenAI is disabled in config, skip it entirely
+    if not openai_enabled_in_config and provider == "openai":
+        if gemini_key:
+            provider = "gemini"
+            print("[llm-selenium] OpenAI disabled in config, using Gemini")
+        else:
+            print("[llm-selenium] OpenAI disabled and no Gemini key, skipping site generation")
+            return []
     
     if provider == "openai" and not openai_key:
         if gemini_key:
