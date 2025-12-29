@@ -12,10 +12,6 @@ concurrency:
   group: job-matcher-pipelines
   cancel-in-progress: true
 
-defaults:
-  run:
-    working-directory: resume_py
-
 jobs:
   generate-matrix:
     runs-on: ubuntu-latest
@@ -26,39 +22,34 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Build pipeline matrix from manifest
+      - name: Detect project directory
+        id: detect
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Supports both layouts:
+          #  - repo root IS the project (config.json present)
+          #  - repo root contains a subdir () with the project
+          if [ -f "config.json" ] && [ -f "requirements.txt" ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f "config.json" ] && [ -f "requirements.txt" ]; then
+            echo "PROJECT_DIR=resume_py" >> "$GITHUB_ENV"
+          else
+            echo "❌ Could not detect project directory."
+            echo "Repo root:"
+            ls -la
+            echo ""
+            echo "resume_py (if exists):"
+            ls -la resume_py 2>/dev/null || true
+            exit 1
+          fi
+          echo "✅ PROJECT_DIR=$PROJECT_DIR"
+
+      - name: Build pipeline matrix from config.json (group by company)
         id: set-matrix
         run: |
-          python3 - << 'PY' >> "$GITHUB_OUTPUT"
-          import json
-          from pathlib import Path
-          
-          manifest_path = Path("configs/pipelines/manifest.json")
-          if not manifest_path.exists():
-              raise SystemExit("Missing configs/pipelines/manifest.json. Run tools/split_config_into_pipelines.py and commit outputs.")
-          
-          manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-          pipelines = manifest.get("pipelines", [])
-          
-          include = []
-          for p in pipelines:
-              safe = p.get("safe_name")
-              cfg = p.get("config")
-              if not safe or not cfg:
-                  continue
-              include.append(
-                  {
-                      "safe_name": safe,
-                      "company": p.get("company", safe),
-                      "config_path": cfg,
-                  }
-              )
-          
-          if not include:
-              raise SystemExit("No pipelines found in manifest.json")
-          
-          print("matrix=" + json.dumps({"include": include}))
-          PY
+          MATRIX_JSON="$(python3 "${PROJECT_DIR}/tools/pipelines_runtime.py" matrix --config "${PROJECT_DIR}/config.json")"
+          echo "matrix=${MATRIX_JSON}" >> "$GITHUB_OUTPUT"
 
   match-jobs:
     needs: generate-matrix
@@ -72,15 +63,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Detect project directory
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -f "config.json" ] && [ -f "requirements.txt" ]; then
+            echo "PROJECT_DIR=." >> "$GITHUB_ENV"
+          elif [ -f "config.json" ] && [ -f "requirements.txt" ]; then
+            echo "PROJECT_DIR=resume_py" >> "$GITHUB_ENV"
+          else
+            echo "❌ Could not detect project directory."
+            ls -la
+            exit 1
+          fi
+          echo "✅ PROJECT_DIR=$PROJECT_DIR"
+
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: 'resume_py/requirements.txt'
+          cache-dependency-path: |
+            requirements.txt
+            requirements.txt
 
       - name: Install dependencies
         run: |
+          cd "${PROJECT_DIR}"
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
@@ -88,6 +97,14 @@ jobs:
         uses: browser-actions/setup-chrome@v1
         with:
           chrome-version: stable
+
+      - name: Generate per-company pipeline config (runtime)
+        run: |
+          python3 "${PROJECT_DIR}/tools/pipelines_runtime.py" write-config \
+            --config "${PROJECT_DIR}/config.json" \
+            --company "${{ matrix.company }}" \
+            --safe-name "${{ matrix.safe_name }}" \
+            --out "${PROJECT_DIR}/configs/pipelines/${{ matrix.safe_name }}.json"
 
       - name: Run matcher (per pipeline config)
         timeout-minutes: 55
@@ -99,14 +116,15 @@ jobs:
           OPENAI_EMBED_MODEL: "text-embedding-3-small"
           PYTHONUNBUFFERED: "1"
         run: |
+          cd "${PROJECT_DIR}"
           echo "🚀 Starting job matcher (pipeline: ${{ matrix.safe_name }})..."
           echo "Company: ${{ matrix.company }}"
-          echo "Config:  ${{ matrix.config_path }}"
+          echo "Config:  configs/pipelines/${{ matrix.safe_name }}.json"
           echo "⏰ Timeout: 55 minutes"
           echo ""
           
           # Run with verbose output and timeout (3300 seconds = 55 minutes)
-          timeout 3300 python match.py --config "${{ matrix.config_path }}" 2>&1 | tee "match_${{ matrix.safe_name }}.log" || {
+          timeout 3300 python match.py --config "configs/pipelines/${{ matrix.safe_name }}.json" 2>&1 | tee "match_${{ matrix.safe_name }}.log" || {
             EXIT_CODE=$?
             if [ $EXIT_CODE -eq 124 ]; then
               echo ""
@@ -123,6 +141,7 @@ jobs:
       - name: List outputs
         if: always()
         run: |
+          cd "${PROJECT_DIR}"
           echo "📁 Output directory structure:"
           ls -lR output/ 2>/dev/null || echo "No output directory found"
 
@@ -131,7 +150,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: match-log-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: resume_py/match_${{ matrix.safe_name }}.log
+          path: |
+            match_${{ matrix.safe_name }}.log
+            match_${{ matrix.safe_name }}.log
           if-no-files-found: warn
           retention-days: 7
 
@@ -140,7 +161,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: output-${{ matrix.safe_name }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: resume_py/output/
+          path: |
+            output/
+            output/
           if-no-files-found: warn
           retention-days: 7
 
