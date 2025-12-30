@@ -116,13 +116,16 @@ def normalize_site(site: Dict[str, Any]) -> Dict[str, Any]:
         site.setdefault("absolute_base", "https://www.uber.com")
         return site
 
-    if host.endswith("wd5.myworkdayjobs.com"):
-        # Workday-powered career sites (e.g., NVIDIA, Qualcomm)
+    if host.endswith(".myworkdayjobs.com"):
+        # Workday-powered career sites (e.g., NVIDIA, Qualcomm, Valeo)
         site["list_selector"] = "li[data-automation-id='jobPosting'], div[class*='job-item']"
         site["title_selector"] = "a[data-automation-id='jobTitle'], h3"
         site["location_selector"] = "div[data-automation-id='locations']"
         site["link_selector"] = "a[data-automation-id='jobTitle']"
         site.setdefault("wait_selector", "li[data-automation-id='jobPosting']")
+        site.setdefault("domain_filter", host)
+        scheme = parsed.scheme or "https"
+        site.setdefault("absolute_base", f"{scheme}://{host}")
         return site
 
     # Generic fallback for "jobs" or "careers" domains

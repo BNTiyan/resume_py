@@ -4,6 +4,7 @@ Extracts job URLs, titles, locations, and descriptions from HTML using LLM.
 """
 import os
 import re
+import html
 from typing import Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -69,8 +70,8 @@ class LLMJobListExtractor:
         matches = re.finditer(pattern, html_text, re.IGNORECASE | re.DOTALL)
         
         for match in matches:
-            href = match.group(1)
-            text = re.sub(r'<[^>]+>', '', match.group(2)).strip()
+            href = html.unescape(match.group(1))
+            text = html.unescape(re.sub(r'<[^>]+>', '', match.group(2))).strip()
             
             # Normalize relative URLs
             if href.startswith('/'):

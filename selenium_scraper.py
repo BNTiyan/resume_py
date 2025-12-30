@@ -5,6 +5,7 @@ from urllib.parse import urljoin, urlparse
 
 import os
 import re
+import html
 
 try:
     from selenium import webdriver
@@ -61,6 +62,48 @@ _NON_JOB_TITLE_HINTS = [
     "key hiring areas",
 ]
 
+def _clean_extracted_title(title: str) -> str:
+    """
+    Generic cleanup for noisy titles scraped from cards/aria-labels.
+
+    Examples:
+      "Read more about the job X" -> "X"
+      "Full Stack Engineer 54064 Livonia, MI ... Posted 2 months ago" -> "Full Stack Engineer"
+    """
+    t = (title or "").strip()
+    if not t:
+        return ""
+    tl = t.lower()
+
+    # Common prefix from some job boards
+    prefix = "read more about the job "
+    if tl.startswith(prefix):
+        t = t[len(prefix):].strip()
+        tl = t.lower()
+
+    # Drop everything after "Posted ..." blocks (common in card text)
+    m = re.search(r"\bposted\b", t, flags=re.IGNORECASE)
+    if m:
+        left = t[: m.start()].strip(" -|•:\n\t")
+        if left:
+            t = left
+            tl = t.lower()
+
+    # Remove "Job ID: 12345" suffixes
+    t = re.sub(r"\bjob\s*id\s*:\s*\S+.*$", "", t, flags=re.IGNORECASE).strip(" -|•:\n\t")
+
+    # If a large numeric token appears (often a job id) followed by location/metadata,
+    # keep only the leading title part.
+    m = re.match(r"^(?P<head>.+?)\s+\d{4,}\b.*$", t)
+    if m:
+        head = (m.group("head") or "").strip(" -|•:\n\t")
+        if len(head) >= 8:
+            t = head
+
+    # Final whitespace normalize
+    t = re.sub(r"\s+", " ", t).strip()
+    return t
+
 
 def _heuristic_extract_job_links(page_source: str, base_url: str) -> list[dict[str, str]]:
     """
@@ -75,8 +118,8 @@ def _heuristic_extract_job_links(page_source: str, base_url: str) -> list[dict[s
     # Very lightweight anchor extraction; avoids bringing in bs4.
     # We don't need perfect HTML parsing—just href + some nearby text.
     for m in re.finditer(r'<a[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>', page_source, re.IGNORECASE | re.DOTALL):
-        href = (m.group(1) or "").strip()
-        text = (m.group(2) or "")
+        href = html.unescape((m.group(1) or "").strip())
+        text = html.unescape((m.group(2) or ""))
         # Strip tags from anchor text
         text = re.sub(r"<[^>]+>", " ", text)
         text = re.sub(r"\s+", " ", text).strip()
@@ -101,7 +144,7 @@ def _heuristic_extract_job_links(page_source: str, base_url: str) -> list[dict[s
         if not any(h in url_l for h in _JOB_URL_HINTS) and ("/job/" not in url_l and "/jobs/" not in url_l):
             continue
 
-        title = text[:200]
+        title = _clean_extracted_title(text[:200])
         if not title:
             # last resort: use URL fragment
             title = "Job"
@@ -559,6 +602,9 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
                     if not title and link and link.startswith('http'):
                         title = f"Job at {site.get('company', 'Company')}"
                         print(f"  [selenium-debug] Using fallback title: {title}")
+
+                    # Clean up noisy titles (e.g., includes location/posted date)
+                    title = _clean_extracted_title(title) or title
                     
                     # Debug: Log URL extraction result
                     if not link:
@@ -615,7 +661,11 @@ def fetch_selenium_sites(sites: list[Any], fetch_limit: int) -> list[dict[str, A
             if valid_url_count < 3 or jobs_with_titles < 3:
                 try:
                     page_source = driver.page_source or ""
-                    base_url = site.get("absolute_base") or url
+                    # IMPORTANT: Use the actual page URL as base. Some configs set absolute_base
+                    # to a vanity domain (e.g., jobs.company.com) while the real links live on a
+                    # different host (e.g., *.myworkdayjobs.com). Using `url` avoids generating
+                    # non-resolving links like jobs.valeo.com/* when the page is on Workday.
+                    base_url = url
                     heuristic = _heuristic_extract_job_links(page_source, base_url)
                     if heuristic:
                         existing_urls = {r.get("url") for r in results if r.get("url")}
