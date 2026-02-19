@@ -26,8 +26,13 @@ langchain-google-genai
 langchain-core
 langchain-community
 langchain-text-splitters
+langchain-huggingface
 python-dotenv
 loguru
+
+# Free local embeddings + semantic scoring (no API key needed)
+# ~80 MB download on first use, then cached
+sentence-transformers>=3.0.0
 
 # Heavy dependencies (required for full matching logic)
 selenium

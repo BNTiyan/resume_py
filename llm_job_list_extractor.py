@@ -108,68 +108,67 @@ class LLMJobListExtractor:
         # First, extract all links from HTML
         all_links = self._extract_links_from_html(html_content, base_url)
         
-        # Clean HTML for LLM processing (limit size)
-        cleaned_html = self._clean_html(html_content)
-        if len(cleaned_html) > 30000:  # Limit to ~30k chars
-            cleaned_html = cleaned_html[:30000] + "..."
-        
-        # Extract links text for context
+        # Extract links text for context — the regex already captured all hrefs,
+        # so we don't need to send the full HTML to the LLM.  A small snippet of
+        # cleaned text is included only to give the model a bit of page-title/heading
+        # context when link text alone is ambiguous.
         links_text = "\n".join([
-            f"Link: {link['url']} | Text: {link['text'][:100]}"
-            for link in all_links[:200]  # Limit to first 200 links
+            f"Link: {link['url']} | Text: {link['text'][:120]}"
+            for link in all_links[:300]  # up to 300 links
         ])
-        
+
+        # Provide a tiny HTML snippet (headings/titles only) for extra context.
+        # Stripping to 3k chars avoids the bulk of redundant body copy.
+        cleaned_snippet = self._clean_html(html_content)[:3000]
+
         # Build prompt for LLM
         prompt_template = ChatPromptTemplate.from_template("""
-You are an expert at extracting job listings from career pages. Analyze the HTML content and links below to extract all job postings.
+You are an expert at identifying job listings from career page link lists.
 
 **Company:** {company}
 **Base URL:** {base_url}
 
-**Available Links:**
+**All links found on the page (url | link text):**
 {links_text}
 
-**Page Content (first 30k chars):**
-{cleaned_html}
+**Page heading context (first 3k chars of visible text):**
+{cleaned_snippet}
 
 **Instructions:**
-1. Identify all job postings on this page
-2. For each job, extract:
-   - Job title
-   - Job URL (must be a valid absolute URL)
-   - Location (if available)
-   - Brief description (if available, max 200 chars)
+1. From the links above, identify those that point to individual job postings.
+2. For each job link extract:
+   - Job title (from link text or nearby context)
+   - Job URL (absolute)
+   - Location (if visible in link text, else "")
+   - Brief description (max 100 chars, else "")
 
-3. Return results in this EXACT JSON format (array of objects):
+3. Return ONLY a JSON array:
 [
   {{
     "title": "Job Title",
     "url": "https://full-url-to-job-posting",
     "location": "City, State or Remote",
     "description": "Brief job description"
-  }},
-  ...
+  }}
 ]
 
-**CRITICAL RULES:**
-- Only include jobs (not "Learn More", "About Us", etc.)
-- URLs MUST be absolute (start with http:// or https://)
-- URLs should point to individual job detail pages, not general pages
-- If URL is relative, make it absolute using base_url
-- Extract at most {max_jobs} jobs
-- If you can't find any jobs, return an empty array: []
+**RULES:**
+- Skip navigation links ("Learn More", "About Us", "Home", etc.)
+- URLs must be absolute (http:// or https://)
+- Max {max_jobs} jobs
+- Return [] if no jobs found
 
-**Output ONLY valid JSON, no other text:**
+Output ONLY valid JSON:
 """)
-        
+
         try:
             chain = prompt_template | self.llm | self.output_parser
             response = chain.invoke({
                 "company": company or "Unknown",
                 "base_url": base_url,
-                "links_text": links_text[:5000],  # Limit links text
-                "cleaned_html": cleaned_html,
-                "max_jobs": max_jobs
+                "links_text": links_text[:6000],  # ~6k chars covers 300 links
+                "cleaned_snippet": cleaned_snippet,
+                "max_jobs": max_jobs,
             })
             
             # Parse JSON response
