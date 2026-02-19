@@ -4,10 +4,14 @@ Quick Apply Web App - Flask Backend
 Generate tailored resume and cover letter through a web interface
 """
 
-from flask import Flask, render_template, request, jsonify, send_file, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file, send_from_directory, Response, stream_with_context
 from flask_cors import CORS
 import os
 import json
+import queue
+import threading
+import uuid
+import time
 from pathlib import Path
 import tempfile
 import shutil
@@ -34,6 +38,10 @@ from PyPDF2 import PdfReader
 
 app = Flask(__name__)
 CORS(app)
+
+# Discovery task registry (populated by /api/discover, read by /api/status/<id>)
+discovery_tasks: dict = {}
+discovery_lock = threading.Lock()
 
 # Configuration
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
@@ -620,7 +628,8 @@ def discover():
         
         resume_text = None
         resume_structured = None
-        
+        resume_file = request.files.get('resume_file')
+
         if resume_file and resume_file.filename != '':
             # Handle uploaded resume file
             upload_dir = Path(app.config['UPLOAD_FOLDER'])
@@ -888,6 +897,169 @@ def preview_file(filename):
         )
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/status/<task_id>', methods=['GET'])
+def task_status(task_id):
+    """Return status of a background discovery task."""
+    with discovery_lock:
+        task = discovery_tasks.get(task_id)
+    if not task:
+        return jsonify({'status': 'not_found'}), 404
+    return jsonify(task)
+
+
+# ---------------------------------------------------------------------------
+# SSE-based streaming generation — lets the frontend show live step progress
+# ---------------------------------------------------------------------------
+_sse_queues: dict[str, queue.Queue] = {}
+_sse_lock = threading.Lock()
+
+
+def _sse_event(q: queue.Queue, step: str, message: str, data: dict | None = None) -> None:
+    """Push a progress event onto the SSE queue."""
+    payload = {"step": step, "message": message}
+    if data:
+        payload.update(data)
+    q.put(json.dumps(payload))
+
+
+@app.route('/api/generate/stream', methods=['POST'])
+def generate_stream():
+    """
+    SSE endpoint: same inputs as /api/generate but streams progress events.
+    The client connects with EventSource and receives named events:
+      - progress  { step, message }
+      - result    { ...same as /api/generate response... }
+      - error     { message }
+    """
+    data = request.json or {}
+    job_link = data.get('job_link', '').strip()
+    job_description = data.get('job_description', '').strip()
+    company_name = data.get('company', '').strip()
+    job_title = data.get('title', '').strip()
+
+    if not job_link and not job_description:
+        return jsonify({'success': False, 'error': 'job_link or job_description required'}), 400
+
+    stream_id = str(uuid.uuid4())
+    q: queue.Queue = queue.Queue()
+    with _sse_lock:
+        _sse_queues[stream_id] = q
+
+    def worker():
+        try:
+            config = load_config()
+            if not config:
+                _sse_event(q, 'error', 'config.json not found')
+                q.put(None)
+                return
+
+            resume_path = Path("input/resume.yml")
+            if not resume_path.exists():
+                _sse_event(q, 'error', 'input/resume.yml not found')
+                q.put(None)
+                return
+
+            _, resume_data = load_resume_data(resume_path)
+            if not resume_data:
+                _sse_event(q, 'error', 'Failed to load resume')
+                q.put(None)
+                return
+
+            _sse_event(q, 'progress', 'Fetching job description…')
+            if job_link:
+                jd = fetch_job_description_from_url(job_link)
+                if not jd:
+                    _sse_event(q, 'error', 'Could not fetch job description from URL')
+                    q.put(None)
+                    return
+                nonlocal job_description, company_name, job_title
+                job_description = jd
+                if not company_name or not job_title:
+                    ec, et = extract_job_info_from_url(job_link)
+                    company_name = company_name or ec or 'Target Company'
+                    job_title = job_title or et or 'Desired Role'
+            else:
+                company_name = company_name or 'Target Company'
+                job_title = job_title or 'Desired Role'
+
+            _sse_event(q, 'progress', 'Scoring resume against job…')
+            job_dict = {'title': job_title, 'company': company_name, 'location': '', 'description': job_description}
+            resume_text_raw = render_resume_from_yaml(resume_data)
+            match_score = round(score_job(job_dict, resume_text_raw), 1)
+            overlaps = get_overlapping_skills(resume_data, job_description)
+            _sse_event(q, 'progress', f'Match score: {match_score}%', {'match_score': match_score, 'matched_skills': overlaps})
+
+            _sse_event(q, 'progress', 'Generating tailored resume…')
+            result, error = generate_documents(
+                job_description=job_description,
+                company_name=company_name,
+                job_title=job_title,
+                resume_data=resume_data,
+                config=config,
+            )
+            if error:
+                _sse_event(q, 'error', error)
+                q.put(None)
+                return
+
+            _sse_event(q, 'progress', 'Generating cover letter & saving files…')
+
+            # Attach skill gap info to result
+            all_jd_keywords = list({
+                w.lower() for w in re.findall(r'[A-Za-z0-9+#.\-/]+', job_description) if len(w) > 2
+            })
+            matched_set = {s.lower() for s in overlaps}
+            missing_skills = [k for k in all_jd_keywords if k not in matched_set][:15]
+            result['matched_skills'] = overlaps
+            result['missing_skills'] = missing_skills
+
+            q.put(json.dumps({'step': 'result', **result}))
+        except Exception as e:
+            _sse_event(q, 'error', f'Server error: {e}')
+        finally:
+            q.put(None)  # sentinel
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def event_stream():
+        while True:
+            msg = q.get()
+            if msg is None:
+                break
+            parsed = json.loads(msg)
+            step = parsed.get('step', 'progress')
+            yield f"event: {step}\ndata: {msg}\n\n"
+        with _sse_lock:
+            _sse_queues.pop(stream_id, None)
+
+    return Response(
+        stream_with_context(event_stream()),
+        content_type='text/event-stream',
+        headers={'Cache-Control': 'no-cache', 'X-Accel-Buffering': 'no'},
+    )
+
+
+@app.route('/api/preview_text/<path:output_dir>')
+def preview_text(output_dir):
+    """Return generated resume and cover letter as plain text for inline preview."""
+    try:
+        base = Path(app.config['OUTPUT_FOLDER']) / output_dir
+        result = {}
+        for name, pattern in [('resume', '*_resume.pdf'), ('cover_letter', '*_cover_letter.pdf')]:
+            matches = list(base.glob(pattern))
+            if matches:
+                try:
+                    from PyPDF2 import PdfReader
+                    reader = PdfReader(str(matches[0]))
+                    text = '\n'.join(p.extract_text() or '' for p in reader.pages)
+                    result[name] = text.strip()
+                except Exception:
+                    result[name] = ''
+        return jsonify({'success': True, **result})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 if __name__ == '__main__':
