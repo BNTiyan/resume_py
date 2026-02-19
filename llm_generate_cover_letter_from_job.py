@@ -13,7 +13,7 @@ except Exception:
 from ..utils import LoggerChatModel
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
 from pathlib import Path
 from dotenv import load_dotenv
 from requests.exceptions import HTTPError as HTTPStatusError
@@ -32,13 +32,10 @@ logger.add(log_path / "gpt_cover_letter_job_descr.log", rotation="1 day", compre
 
 class LLMCoverLetterJobDescription:
     def __init__(self, openai_api_key, strings):
-        embedding_model = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-ada-002")
+        # llm_embeddings was initialized here but never used — removed to avoid
+        # the paid OpenAI embedding call on every cover letter instantiation.
         self.llm_cheap = LoggerChatModel(
             ChatOpenAI(model="gpt-4o-mini", api_key=openai_api_key, temperature=0.4)
-        )
-        self.llm_embeddings = OpenAIEmbeddings(
-            model=embedding_model,
-            api_key=openai_api_key,
         )
         self.strings = strings
 

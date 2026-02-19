@@ -176,6 +176,49 @@ _non_alnum = re.compile(r"[^a-z0-9+#.\-\s]")
 _html_strip_re = re.compile(r"<[^>]+>")
 _html_script_style_re = re.compile(r"(?is)<(script|style).*?>.*?</\\1>")
 
+# ---------------------------------------------------------------------------
+# Semantic scorer — uses sentence-transformers locally (free, no API key).
+# Falls back gracefully to None if the package is not installed, in which case
+# score_job() continues using fuzzy matching only.
+# ---------------------------------------------------------------------------
+_semantic_model = None
+_semantic_resume_vec = None  # cached embedding of the resume text
+
+def _get_semantic_model():
+    global _semantic_model
+    if _semantic_model is not None:
+        return _semantic_model
+    try:
+        from sentence_transformers import SentenceTransformer  # type: ignore
+        _semantic_model = SentenceTransformer("all-MiniLM-L6-v2")
+    except Exception:
+        _semantic_model = False  # mark as unavailable so we don't retry
+    return _semantic_model
+
+def _semantic_score(resume_text: str, job_text: str) -> float | None:
+    """
+    Return cosine similarity [0-100] between resume and job text using a local
+    sentence-transformer model.  Returns None if sentence-transformers is not installed.
+    """
+    model = _get_semantic_model()
+    if not model:
+        return None
+    try:
+        import numpy as np  # type: ignore
+        global _semantic_resume_vec
+        # Cache the resume embedding — it's the same across all jobs in one run
+        if _semantic_resume_vec is None:
+            _semantic_resume_vec = model.encode(resume_text[:2000], convert_to_numpy=True)
+        job_vec = model.encode(job_text[:1000], convert_to_numpy=True)
+        # Cosine similarity scaled to 0-100
+        cos = float(
+            np.dot(_semantic_resume_vec, job_vec)
+            / (np.linalg.norm(_semantic_resume_vec) * np.linalg.norm(job_vec) + 1e-9)
+        )
+        return max(0.0, min(cos * 100, 100.0))
+    except Exception:
+        return None
+
 def _normalize_meta_field(value: str | None) -> str:
     """Normalize company/role/location fields, stripping placeholder text."""
     if not value:
@@ -1110,8 +1153,18 @@ def score_job(job: dict[str, Any], resume_text: str) -> float:
         job.get("location", ""),
         job.get("description", ""),
     ])
-    # token-set fuzzy similarity
-    sim = fuzz.token_set_ratio(tokenize_for_fuzz(resume_text), tokenize_for_fuzz(fields))
+
+    # Fuzzy token-set similarity (always available)
+    fuzzy_sim = fuzz.token_set_ratio(tokenize_for_fuzz(resume_text), tokenize_for_fuzz(fields))
+
+    # Semantic similarity via local sentence-transformers (free, no API key).
+    # When available, blend 40% fuzzy + 60% semantic for better ranking quality.
+    sem_sim = _semantic_score(resume_text, fields)
+    if sem_sim is not None:
+        sim = 0.4 * fuzzy_sim + 0.6 * sem_sim
+    else:
+        sim = float(fuzzy_sim)
+
     # boost relevant titles
     if re.search(r"mlops|machine\s+learning|data\s+engineer|full\s*stack|python", title.lower()):
         sim += 10

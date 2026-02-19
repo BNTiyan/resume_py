@@ -640,9 +640,14 @@ class LLMResumer:
         text = (job_description or "").strip()
         if not text:
             return ""
+        # Skip the LLM call when the JD is short — the excerpt IS the summary.
+        # Threshold: ~1500 chars ≈ one dense paragraph; no value in re-paraphrasing.
+        if len(text) <= 1500:
+            logger.debug("JD short enough ({} chars); skipping LLM summarization", len(text))
+            return text
         prompt = ChatPromptTemplate.from_template(self.strings.job_summary)
         chain = prompt | self.llm_resume | StrOutputParser()
-        summary = chain.invoke({"text": text})
+        summary = chain.invoke({"text": text[:6000]})  # cap input to 6k chars
         logger.debug("Generated job summary ({} chars)", len(summary))
         return summary.strip()
 
@@ -664,8 +669,9 @@ class LLMResumer:
         role: str,
         job_summary: Optional[str] = None,
     ) -> Dict[str, str]:
-        summary = job_summary or self._summarize_job_description(job_description)
         excerpt = self._prepare_job_excerpt(job_description)
+        # Re-use a caller-provided summary, or derive one (skipped for short JDs).
+        summary = job_summary if job_summary is not None else self._summarize_job_description(job_description)
         return {
             "job_summary": summary,
             "job_description": excerpt,
@@ -748,64 +754,118 @@ class LLMResumer:
     # ------------------------------------------------------------------ #
     # Public generation methods                                          #
     # ------------------------------------------------------------------ #
+
+    _SINGLE_CALL_TEMPLATE = textwrap.dedent("""
+        You are an expert resume writer.  Produce a complete, ATS-optimised resume
+        tailored to the job below.  Use ONLY the candidate data provided — do not
+        invent facts.
+
+        === JOB ===
+        Company: {company}
+        Role: {role}
+        Summary: {job_summary}
+        Keywords: {job_keywords}
+
+        === CANDIDATE ===
+        {personal_information}
+
+        EXPERIENCE:
+        {experience_details}
+
+        EDUCATION:
+        {education_details}
+
+        PROJECTS:
+        {projects}
+
+        SKILLS:
+        {skills}
+
+        ACHIEVEMENTS:
+        {achievements}
+
+        CERTIFICATIONS:
+        {certifications}
+
+        LANGUAGES / INTERESTS:
+        {languages}
+        {interests}
+
+        === INSTRUCTIONS ===
+        Write each section with its heading in CAPITALS followed by content.
+        Use bullet points (•) for experience/achievements.
+        Weave in job keywords naturally.
+        Sections to include (only if data is present):
+        HEADER, PROFESSIONAL SUMMARY, WORK EXPERIENCE, PROJECTS, EDUCATION,
+        ACHIEVEMENTS, CERTIFICATIONS, TECHNICAL SKILLS.
+        Output plain text only — no markdown, no JSON.
+    """)
+
     def generate_tailored_resume(
         self,
         job_description: str,
         company: str,
         role: str,
         job_context: Optional[Dict[str, str]] = None,
+        *,
+        single_call: bool = True,
     ) -> str:
         """
         Produce a tailored resume in plain text format.
+
+        single_call=True (default): one LLM round-trip for the whole resume.
+        single_call=False: legacy per-section calls (higher quality, ~8x more tokens).
+        Set env RESUME_SINGLE_CALL=false to force the legacy path.
         """
         self._ensure_resume_loaded()
+        if os.getenv("RESUME_SINGLE_CALL", "true").lower() == "false":
+            single_call = False
+
         context = dict(self._resume_context)
         job_ctx = job_context or self._build_job_context(job_description, company, role)
         context.update(job_ctx)
 
+        if single_call:
+            result = self._invoke_prompt(self._SINGLE_CALL_TEMPLATE, context)
+            logger.debug("Generated tailored resume in single call ({} chars)", len(result))
+            return result.strip()
+
+        # Legacy path — kept as fallback / for high-quality mode
         sections: List[str] = []
 
-        # Header (always included)
         header = self.generate_header(context)
         if header:
             sections.append(header)
 
-        # Summary
         summary_section = self.generate_summary_section(context)
         if summary_section:
             sections.append(summary_section)
 
-        # Experience
         if context.get("experience_details"):
             experience_section = self.generate_work_experience_section(context)
             if experience_section:
                 sections.append(experience_section)
 
-        # Projects
         if context.get("projects"):
             projects_section = self.generate_projects_section(context)
             if projects_section:
                 sections.append(projects_section)
 
-        # Education
         if context.get("education_details"):
             education_section = self.generate_education_section(context)
             if education_section:
                 sections.append(education_section)
 
-        # Achievements
         if context.get("achievements"):
             achievements_section = self.generate_achievements_section(context)
             if achievements_section:
                 sections.append(achievements_section)
 
-        # Certifications
         if context.get("certifications"):
             certifications_section = self.generate_certifications_section(context)
             if certifications_section:
                 sections.append(certifications_section)
 
-        # Additional skills
         if any(
             context.get(field)
             for field in ("skills", "languages", "interests", "additional_notes")

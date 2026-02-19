@@ -26,18 +26,23 @@ class LLMManager:
     
     def _initialize(self):
         """Initialize LLM provider based on priority/availability"""
-        
+
         # Priority 1: Gemini (free, cloud, good quality)
         if LLM_PROVIDER in ['gemini', 'auto']:
             if self._try_gemini():
                 return
-        
-        # Priority 2: Ollama (free, local, unlimited)
+
+        # Priority 2: HuggingFace Inference API (free tier, cloud, no local install)
+        if LLM_PROVIDER in ['huggingface', 'hf', 'auto']:
+            if self._try_huggingface():
+                return
+
+        # Priority 3: Ollama (free, local, unlimited)
         if LLM_PROVIDER in ['ollama', 'auto']:
             if self._try_ollama():
                 return
-        
-        # Priority 3: OpenAI (paid, only if explicitly enabled)
+
+        # Priority 4: OpenAI (paid, only if explicitly enabled)
         if LLM_PROVIDER == 'openai' or (LLM_PROVIDER == 'auto' and ENABLE_OPENAI):
             if self._try_openai():
                 return
@@ -84,8 +89,34 @@ class LLMManager:
                 print("  Get key: https://makersuite.google.com/app/apikey")
         return False
     
+    def _try_huggingface(self):
+        """Try to use HuggingFace Inference API (free tier, cloud) - PRIORITY 2"""
+        hf_token = os.getenv('HUGGINGFACE_API_TOKEN') or os.getenv('HF_TOKEN')
+        # HF Inference API works without a token for public models at low rate limits,
+        # but a free token (https://huggingface.co/settings/tokens) gives higher limits.
+        try:
+            import requests as _req
+            model = os.getenv('HF_MODEL', 'mistralai/Mistral-7B-Instruct-v0.3')
+            headers = {"Authorization": f"Bearer {hf_token}"} if hf_token else {}
+            # Quick probe — check the model info endpoint (no tokens consumed)
+            r = _req.get(
+                f"https://api-inference.huggingface.co/models/{model}",
+                headers=headers, timeout=5
+            )
+            if r.status_code in (200, 503):  # 503 = model loading, still valid
+                self.client = {"hf_token": hf_token, "model": model}
+                self.provider = 'huggingface'
+                tier = "FREE (authenticated)" if hf_token else "FREE (anonymous, lower limits)"
+                print(f"✓ Using HuggingFace Inference API ({model}) - {tier}")
+                print("  Get a free token: https://huggingface.co/settings/tokens")
+                return True
+        except Exception as e:
+            if LLM_PROVIDER in ('huggingface', 'hf'):
+                print(f"✗ HuggingFace not available: {e}")
+        return False
+
     def _try_ollama(self):
-        """Try to use Ollama (local, free) - PRIORITY 2"""
+        """Try to use Ollama (local, free) - PRIORITY 3"""
         try:
             import requests
             # Check if Ollama is running
@@ -147,6 +178,8 @@ class LLMManager:
                     return self._generate_gemini(messages, temperature, max_tokens)
                 elif self.provider == 'openai':
                     return self._generate_openai(messages, temperature, max_tokens)
+                elif self.provider == 'huggingface':
+                    return self._generate_huggingface(messages, temperature, max_tokens)
                     
             except Exception as e:
                 error_str = str(e).lower()
@@ -176,8 +209,8 @@ class LLMManager:
                     self.client = None
                     self.provider = None
 
-                    # Try Ollama first (unlimited), then OpenAI
-                    if self._try_ollama() or self._try_openai():
+                    # Try HF first (free, cloud), then Ollama (free, local), then OpenAI
+                    if self._try_huggingface() or self._try_ollama() or self._try_openai():
                         # Recursive call will use the new provider
                         return self.generate(messages, temperature, max_tokens, max_retries)
 
@@ -187,6 +220,36 @@ class LLMManager:
         # If we exhausted all retries
         raise Exception(f"Failed to generate after {max_retries} attempts due to rate limits")
     
+    def _generate_huggingface(self, messages, temperature, max_tokens):
+        """Generate with HuggingFace Inference API (free tier)"""
+        import requests as _req
+        cfg = self.client  # {"hf_token": ..., "model": ...}
+        model = cfg["model"]
+        hf_token = cfg.get("hf_token")
+
+        # Convert messages to a single prompt string (chat/instruct format)
+        prompt = self._messages_to_prompt(messages)
+
+        headers = {"Content-Type": "application/json"}
+        if hf_token:
+            headers["Authorization"] = f"Bearer {hf_token}"
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": min(max_tokens, 2048),
+                "temperature": max(temperature, 0.01),  # HF API disallows 0
+                "return_full_text": False,
+            },
+        }
+        url = f"https://api-inference.huggingface.co/models/{model}"
+        response = _req.post(url, headers=headers, json=payload, timeout=120)
+        response.raise_for_status()
+        data = response.json()
+        if isinstance(data, list) and data:
+            return data[0].get("generated_text", "").strip()
+        raise Exception(f"Unexpected HF response: {data}")
+
     def _generate_ollama(self, messages, temperature, max_tokens):
         """Generate with Ollama"""
         response = self.client.chat_completions_create(
