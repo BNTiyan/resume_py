@@ -5,39 +5,31 @@ Extracts job URLs, titles, locations, and descriptions from HTML using LLM.
 import os
 import re
 import html
-from typing import Dict, List, Optional
-from urllib.parse import urljoin, urlparse
+import json
+from typing import Dict, List, Optional, Any
+from urllib.parse import urljoin
 
-try:
-    import openai_compat  # noqa: F401
-except Exception:
-    openai_compat = None
-
-from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
-from dotenv import load_dotenv
-
-load_dotenv()
-
+# We use LLMManager to get the client, but we might need to wrap it 
+# or just use the generate method directly. 
+# For simplicity, we will use the LLMManager's generate method.
+from llm_manager import get_llm
 
 class LLMJobListExtractor:
     """
     Extract multiple job listings from a career page HTML using LLM.
     More robust than CSS selectors - can adapt to different page structures.
+    Uses LLMManager to support multiple providers (Gemini, Ollama, OpenAI).
     """
     
-    def __init__(self, openai_api_key: Optional[str] = None):
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
-        if not api_key:
-            raise ValueError("OpenAI API key required")
-        
-        self.llm = ChatOpenAI(
-            model="gpt-4o-mini",
-            api_key=api_key,
-            temperature=0.1  # Low temperature for consistent extraction
-        )
-        self.output_parser = StrOutputParser()
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        self.llm_manager = get_llm()
+        # Ensure LLM is initialized
+        if not self.llm_manager.client:
+            # Try to initialize with provided config if not already ready
+            if config:
+                self.llm_manager.config = config
+                self.llm_manager._initialize()
     
     @staticmethod
     def _clean_html(html_text: str) -> str:
@@ -95,47 +87,24 @@ class LLMJobListExtractor:
     ) -> List[Dict[str, str]]:
         """
         Extract job listings from HTML using LLM.
-        
-        Args:
-            html_content: Raw HTML from career page
-            base_url: Base URL for resolving relative links
-            company: Company name (if known)
-            max_jobs: Maximum number of jobs to extract
-            
-        Returns:
-            List of job dicts with: title, company, location, url, description
         """
         # First, extract all links from HTML
         all_links = self._extract_links_from_html(html_content, base_url)
         
-        # Extract links text for context — the regex already captured all hrefs,
-        # so we don't need to send the full HTML to the LLM.  A small snippet of
-        # cleaned text is included only to give the model a bit of page-title/heading
-        # context when link text alone is ambiguous.
+        # Extract links text for context
         links_text = "\n".join([
             f"Link: {link['url']} | Text: {link['text'][:120]}"
             for link in all_links[:300]  # up to 300 links
         ])
 
         # Provide a tiny HTML snippet (headings/titles only) for extra context.
-        # Stripping to 3k chars avoids the bulk of redundant body copy.
         cleaned_snippet = self._clean_html(html_content)[:3000]
 
         # Build prompt for LLM
-        prompt_template = ChatPromptTemplate.from_template("""
-You are an expert at identifying job listings from career page link lists.
+        system_msg = """You are an expert at identifying job listings from career page link lists.
 
-**Company:** {company}
-**Base URL:** {base_url}
-
-**All links found on the page (url | link text):**
-{links_text}
-
-**Page heading context (first 3k chars of visible text):**
-{cleaned_snippet}
-
-**Instructions:**
-1. From the links above, identify those that point to individual job postings.
+Instructions:
+1. From the provided links, identify those that point to individual job postings.
 2. For each job link extract:
    - Job title (from link text or nearby context)
    - Job URL (absolute)
@@ -144,49 +113,55 @@ You are an expert at identifying job listings from career page link lists.
 
 3. Return ONLY a JSON array:
 [
-  {{
+  {
     "title": "Job Title",
     "url": "https://full-url-to-job-posting",
     "location": "City, State or Remote",
     "description": "Brief job description"
-  }}
+  }
 ]
 
-**RULES:**
+RULES:
 - Skip navigation links ("Learn More", "About Us", "Home", etc.)
 - URLs must be absolute (http:// or https://)
 - Max {max_jobs} jobs
 - Return [] if no jobs found
+- Output ONLY valid JSON, no markdown formatting.
+"""
 
-Output ONLY valid JSON:
-""")
+        user_msg = f"""**Company:** {company}
+**Base URL:** {base_url}
+
+**All links found on the page (url | link text):**
+{links_text}
+
+**Page heading context (first 3k chars of visible text):**
+{cleaned_snippet}
+"""
+
+        messages = [
+            {"role": "system", "content": system_msg.replace("{max_jobs}", str(max_jobs))},
+            {"role": "user", "content": user_msg}
+        ]
 
         try:
-            chain = prompt_template | self.llm | self.output_parser
-            response = chain.invoke({
-                "company": company or "Unknown",
-                "base_url": base_url,
-                "links_text": links_text[:6000],  # ~6k chars covers 300 links
-                "cleaned_snippet": cleaned_snippet,
-                "max_jobs": max_jobs,
-            })
+            # Use LLMManager to generate response
+            response = self.llm_manager.generate(messages, temperature=0.1, max_tokens=4000)
             
             # Parse JSON response
             response = response.strip()
             
             # Remove markdown code blocks if present
-            if response.startswith("```"):
+            if "```" in response:
                 response = re.sub(r'^```(?:json)?\s*', '', response)
                 response = re.sub(r'\s*```$', '', response)
             
             # Try to extract JSON array
             json_match = re.search(r'\[.*\]', response, re.DOTALL)
             if json_match:
-                import json
                 jobs = json.loads(json_match.group(0))
             else:
                 # Try parsing entire response as JSON
-                import json
                 jobs = json.loads(response)
             
             # Validate and normalize jobs
@@ -231,7 +206,7 @@ def extract_jobs_from_html(
     html_content: str,
     base_url: str,
     company: Optional[str] = None,
-    openai_api_key: Optional[str] = None,
+    openai_api_key: Optional[str] = None, # kept for signature compat, but ignored/deprecated
     max_jobs: int = 50
 ) -> List[Dict[str, str]]:
     """
@@ -241,14 +216,15 @@ def extract_jobs_from_html(
         html_content: Raw HTML from career page
         base_url: Base URL for resolving relative links
         company: Company name (optional)
-        openai_api_key: OpenAI API key (optional, uses env var if not provided)
+        openai_api_key: DEPRECATED - used to be for OpenAI, now usage is delegated to LLMManager
         max_jobs: Maximum number of jobs to extract
         
     Returns:
         List of job dicts
     """
     try:
-        extractor = LLMJobListExtractor(openai_api_key)
+        # LLMManager handles keys via env vars or internal config
+        extractor = LLMJobListExtractor()
         return extractor.extract_jobs_from_html(html_content, base_url, company, max_jobs)
     except Exception as e:
         print(f"[llm-extractor] Failed to initialize: {e}")

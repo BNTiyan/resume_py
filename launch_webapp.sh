@@ -71,10 +71,10 @@ echo "🌐 Network Information:"
 LOCAL_IP=$(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null | awk '{print $1}')
 if [ -n "$LOCAL_IP" ]; then
     echo "   Local IP: $LOCAL_IP"
-    echo "   Access from this device: http://localhost:5000"
-    echo "   Access from network: http://$LOCAL_IP:5000"
+    echo "   Access from this device: http://localhost:5001"
+    echo "   Access from network: http://$LOCAL_IP:5001"
 else
-    echo "   Access URL: http://localhost:5000"
+    echo "   Access URL: http://localhost:5001"
 fi
 
 echo ""

@@ -1066,8 +1066,8 @@ if __name__ == '__main__':
     print("🚀 Quick Apply Web App Starting...")
     print("📝 Make sure config.json is configured with API keys")
     print("📄 Make sure input/resume.yml exists")
-    print("\n🌐 Open http://localhost:5000 in your browser")
+    print("\n🌐 Open http://localhost:5001 in your browser")
     print("\nPress Ctrl+C to stop\n")
     
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=5001)
 

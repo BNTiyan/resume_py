@@ -76,14 +76,16 @@ class LLMManager:
             api_key = os.getenv('GEMINI_API_KEY')
             if api_key:
                 genai.configure(api_key=api_key)
-                # Use Gemini 2.0 Flash by default; allow override via GEMINI_MODEL
-                model_name = os.getenv('GEMINI_MODEL', 'gemini-2.0-flash')
+                # Use Gemini 2.0 Flash Exp by default for best performance/cost
+                # Check config first, then env var, then default
+                model_name = self.config.get('gemini', {}).get('model') or os.getenv('GEMINI_MODEL', 'gemini-2.0-flash-exp')
                 model = genai.GenerativeModel(model_name)
                 self.client = model
                 self.provider = 'gemini'
                 print(f"✓ Using Google Gemini model: {model_name}")
                 return True
         except Exception as e:
+            print(f"✗ Gemini init failed: {e}")
             if LLM_PROVIDER == 'gemini':
                 print(f"✗ Gemini not available: {e}")
                 print("  Get key: https://makersuite.google.com/app/apikey")
